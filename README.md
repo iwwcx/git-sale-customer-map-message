@@ -1,0 +1,1 @@
+# git-sale-customer-map-message
