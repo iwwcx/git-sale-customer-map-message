@@ -1,0 +1,118 @@
+import request from './request';
+
+// 获取聊天列表
+export function getChatList(params) {
+  return request({
+    url: '/im/GetChatList',
+    method: 'get',
+    params,
+    apiKey: 'profitapi'
+  });
+}
+
+// 获取聊天记录列表
+export function getRecordList(params) {
+  return request({
+    url: '/im/GetRecordList',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// 发送消息（客户端抄送）
+export function saveRecordByClient(data) {
+  return request({
+    url: '/im/SaveRecordByClient',
+    method: 'post',
+    data,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 获取企业产品列表
+export function getCompanyProductList(params) {
+  return request({
+    url: '/prod/GetSList',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 获取企业产品目录
+export function getCompanyProductDirList(params) {
+  return request({
+    url: '/site/comp/proddir/list',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 获取收藏目录
+export function getCollectProductDirList(params) {
+  return request({
+    url: '/dir/2205/list',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 获取收藏产品列表
+export function getCollectProductList(params) {
+  return request({
+    url: '/favorite/prod/list',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 获取产品浏览足迹
+export function getBrowseProductList(params) {
+  return request({
+    url: '/logs/ViewProdLogsForUser',
+    method: 'get',
+    params,
+    apiKey: 'api60'
+  });
+}
+
+// ----------- 图片上传相关接口（对应 supply-chain-im 的上传流程） -----------
+
+// 接口2：获取OBS上传签名，POST /obs/putUrlSignature?category={categoryId}&key={key}&priv={priv}
+// 对应 IM 项目：DataService.post(`${ApiService.EngineerApi}/obs/putUrlSignature?category=...&key=...&priv=...`, { ContentType })
+export function obsPutUrlSignature(params, data) {
+  return request({
+    url: '/obs/putUrlSignature',
+    method: 'post',
+    params, // { category, key, priv }
+    data,   // { ContentType }
+    apiKey: 'profitapi'
+  });
+}
+
+// 接口4：保存文档信息到资料库，POST /data/110/savelife
+// 对应 IM 项目：DataService.post(`${ApiService.Common}/data/${Category.Document}/savelife`, info)
+// Category.Document = 110
+export function saveDocumentLife(data) {
+  return request({
+    url: '/data/110/savelife',
+    method: 'post',
+    data,
+    apiKey: 'api60'
+  });
+}
+
+// 接口5：黑名单检查，GET /im/getIsUserBlock?blockUserId={blockUserId}
+// 对应 IM 项目：DataService.get(`${ApiService.EngineerApi}/im/getIsUserBlock?blockUserId=${blockUserId}`)
+export function getIsUserBlock(params) {
+  return request({
+    url: '/im/getIsUserBlock',
+    method: 'get',
+    params, // { blockUserId }
+    apiKey: 'profitapi'
+  });
+}

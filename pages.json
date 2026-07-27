@@ -1,0 +1,256 @@
+{
+	"easycom": {
+		"autoscan": true,
+		"custom": {
+			"^comp-detail$": "@/common/components/comp-detail.vue",
+			"^staff-detail$": "@/common/components/staff-detail.vue",
+			"^enterprise-detail$": "@/common/components/enterprise-detail.vue",
+			"^loading-overlay$": "@/common/components/loading-overlay.vue",
+			"^member-mask$": "@/common/components/member-mask.vue",
+			"^member-banner$": "@/common/components/member-banner.vue",
+			"^map-filter$": "@/common/components/map-filter.vue"
+		}
+	},
+	"pages": [
+		{
+			"path": "pages/common/start/index",
+			"style": {
+				"navigationBarTitleText": "",
+				"navigationStyle": "custom",
+				"app-plus": {
+					"titleNView": false
+				}
+			}
+		},
+		{
+			"path": "pages/map/index",
+			"style": {
+				"navigationBarTitleText": "探客工兵"
+			}
+		},
+		{
+			"path": "pages/explore/index",
+			"style": {
+				"navigationBarTitleText": "附近资源"
+			}
+		},
+		{
+			"path": "pages/message/index",
+			"style": {
+				"navigationBarTitleText": "消息列表"
+			}
+		},
+		{
+			"path": "pages/resource/index",
+			"style": {
+				"navigationBarTitleText": "搜索",
+				"enablePullDownRefresh": true,
+				"backgroundColor": "#f4f6fa",
+				"backgroundTextStyle": "dark"
+			}
+		},
+		{
+			"path": "pages/mine/index",
+			"style": {
+				"navigationBarTitleText": "我的"
+			}
+		},
+		{
+			"path": "pages/common/pay/pay",
+			"style": {
+				"navigationBarTitleText": "开通会员"
+			}
+		},
+		{
+			"path": "pages/common/login/index",
+			"style": {
+				"navigationBarTitleText": "登录",
+				"navigationStyle": "custom",
+				"app-plus": {
+					"titleNView": false
+				}
+			}
+		}
+	],
+	"subPackages":[
+		{
+			"root": "pages-sub/explore",
+			"pages": [
+				{
+					"path": "comp-detail/index",
+					"style": {
+						"navigationBarTitleText": "公司详情"
+					}
+				},
+				{
+					"path": "enterprise-detail/index",
+					"style": {
+						"navigationBarTitleText": "企业深度档案",
+						"navigationBarBackgroundColor": "#F8F8F8",
+						"navigationBarTextStyle": "black"
+					}
+				},
+				{
+					"path": "staff-detail/index",
+					"style": {
+						"navigationBarTitleText": "个人名片"
+					}
+				}
+			]
+		},
+		{
+			"root": "im-message/pages",
+			"pages": [
+				{
+					"path": "chat/detail",
+					"style": {
+						"navigationBarTitleText": "消息"
+					}
+				},
+				{
+					"path": "product/index",
+					"style": {
+						"navigationBarTitleText": "发产品"
+					}
+				}
+			]
+		},
+		{
+			"root": "pages-sub/mine",
+			"pages": [
+				{
+					"path": "settings/index",
+					"style": {
+						"navigationBarTitleText": "设置"
+					}
+				},
+				{
+					"path": "company/index",
+					"style": {
+						"navigationBarTitleText": "我收藏的公司"
+					}
+				},
+				{
+					"path": "user/index",
+					"style": {
+						"navigationBarTitleText": "我收藏的工程师"
+					}
+				},
+				{
+					"path": "chat/index",
+					"style": {
+						"navigationBarTitleText": "联系记录"
+					}
+				},
+				{
+					"path": "ability-detail/index",
+					"style": {
+						"navigationBarTitleText": "能力档案"
+					}
+				},
+				{
+					"path": "promoter/index",
+					"style": {
+						"navigationBarTitleText": "申请成为推荐官"
+					}
+				},
+				{
+					"path": "customer/index",
+					"style": {
+						"navigationBarTitleText": "我的客户列表"
+					}
+				},
+				{
+					"path": "payment/index",
+					"style": {
+						"navigationBarTitleText": "我的收款信息"
+					}
+				},
+				{
+					"path": "invite/index",
+					"style": {
+						"navigationBarTitleText": "添加邀请人"
+					}
+				},
+				{
+					"path": "ai-report/index",
+					"style": {
+						"navigationBarTitleText": "我的AI报告"
+					}
+				},
+				{
+					"path": "ai-report/detail",
+					"style": {
+						"navigationBarTitleText": "AI分析报告详情"
+					}
+				}
+			]
+		}, 
+		{
+			"root": "pages-sub/web-view",
+			"pages": [
+				{
+					"path": "im",
+					"style": {
+						"navigationBarTitleText": "",
+						"navigationStyle": "custom",
+						"app-plus": {
+							"titleNView": false
+						}
+					}
+				},
+				{
+					"path": "index",
+					"style": {
+						"navigationBarTitleText": ""
+					}
+				}
+			]
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "地图应用",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8"
+	},
+	"tabBar": {
+		"color": "#999999",
+		"selectedColor": "#4facfe",
+		"backgroundColor": "#ffffff",
+		"borderStyle": "black",
+		"list": [
+			{
+				"pagePath": "pages/map/index",
+				"text": "地图",
+				"iconPath": "static/images/tabbar/9.png",
+				"selectedIconPath": "static/images/tabbar/10.png"
+			},
+			{
+				"pagePath": "pages/explore/index",
+				"text": "探客",
+				"iconPath": "static/images/tabbar/1.png",
+				"selectedIconPath": "static/images/tabbar/2.png"
+			},
+			{
+				"pagePath": "pages/message/index",
+				"text": "消息",
+				"iconPath": "static/images/tabbar/7.png",
+				"selectedIconPath": "static/images/tabbar/8.png"
+			},
+			{
+				"pagePath": "pages/resource/index",
+				"text": "搜索",
+				"iconPath": "static/images/tabbar/3.png",
+				"selectedIconPath": "static/images/tabbar/4.png"
+			},
+			{
+				"pagePath": "pages/mine/index",
+				"text": "我的",
+				"iconPath": "static/images/tabbar/5.png",
+				"selectedIconPath": "static/images/tabbar/6.png"
+			}
+		]
+	},
+	"uniIdRouter": {}
+}
