@@ -21,58 +21,81 @@
           <text class="time-divider-text">{{ formatMsgTime(msg.MsgTime) }}</text>
         </view>
 
+        <!-- 撤回提示 -->
+        <view v-if="msg.IsRevoke" :key="'msg-revoke-' + index" class="msg-revoke-tip">
+          <text>{{ msg.RevokeText }}</text>
+        </view>
+
         <!-- 对方消息 -->
-        <view :key="'msg-left-' + index" class="msg-row msg-row-left" v-if="msg.SendUserID !== myUserId">
+        <view :key="'msg-left-' + index" class="msg-row msg-row-left" v-else-if="msg.SendUserID !== myUserId">
           <image class="msg-avatar" :src="interlocutorLogo || defaultAvatar" mode="aspectFill" />
-          <view class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }">
-            <!-- ------------------ 图片 ---------------- -->
-            <image v-if="msg.MsgType === 2" class="msg-image" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @tap="previewImage(msg)" />
-            <!-- ------------------ 语音 ---------------- -->
-            <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
-              <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
-              <text class="audio-duration">{{ msg.AudioDuration }}″</text>
-            </view>
-            <!-- ------------------ 链接卡片 ---------------- -->
-            <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
-              <text class="link-card-header">分享链接</text>
-              <view class="link-card-body">
-                <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
-                <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
-                <view class="link-card-info">
-                  <text class="link-card-title">{{ msg.LinkTitle }}</text>
-                  <text class="link-card-url">{{ msg.LinkUrl }}</text>
+          <view class="msg-content-col">
+            <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
+              <!-- ------------------ 图片 ---------------- -->
+              <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
+              <!-- ------------------ 语音 ---------------- -->
+              <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
+                <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
+                <text class="audio-duration">{{ msg.AudioDuration }}″</text>
+              </view>
+              <!-- ------------------ 链接卡片 ---------------- -->
+              <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
+                <text class="link-card-header">分享链接</text>
+                <view class="link-card-body">
+                  <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
+                  <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
+                  <view class="link-card-info">
+                    <text class="link-card-title">{{ msg.LinkTitle }}</text>
+                    <text class="link-card-url">{{ msg.LinkUrl }}</text>
+                  </view>
                 </view>
               </view>
+              <!-- ------------------ 引用回复正文 ---------------- -->
+              <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
+              <!-- ------------------ 文本 ---------------- -->
+              <text v-else class="msg-text">{{ msg.DisplayText }}</text>
             </view>
-            <!-- ------------------ 文本 ---------------- -->
-            <text v-else class="msg-text">{{ msg.DisplayText }}</text>
+            <!-- ------------------ 引用参考（气泡外部） ---------------- -->
+            <view v-if="msg.MsgType === 22" class="msg-quote-ref-box">
+              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}: </text>
+              <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
+            </view>
           </view>
         </view>
 
         <!-- 自己消息 -->
         <view :key="'msg-right-' + index" class="msg-row msg-row-right" v-else>
-          <view class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }">
-            <!-- ------------------ 图片 ---------------- -->
-            <image v-if="msg.MsgType === 2" class="msg-image" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @tap="previewImage(msg)" />
-            <!-- ------------------ 语音 ---------------- -->
-            <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
-              <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
-              <text class="audio-duration">{{ msg.AudioDuration }}″</text>
-            </view>
-            <!-- ------------------ 链接卡片 ---------------- -->
-            <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
-              <text class="link-card-header">分享链接</text>
-              <view class="link-card-body">
-                <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
-                <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
-                <view class="link-card-info">
-                  <text class="link-card-title">{{ msg.LinkTitle }}</text>
-                  <text class="link-card-url">{{ msg.LinkUrl }}</text>
+          <view class="msg-content-col">
+            <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
+              <!-- ------------------ 图片 ---------------- -->
+              <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
+              <!-- ------------------ 语音 ---------------- -->
+              <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
+                <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
+                <text class="audio-duration">{{ msg.AudioDuration }}″</text>
+              </view>
+              <!-- ------------------ 链接卡片 ---------------- -->
+              <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
+                <text class="link-card-header">分享链接</text>
+                <view class="link-card-body">
+                  <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
+                  <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
+                  <view class="link-card-info">
+                    <text class="link-card-title">{{ msg.LinkTitle }}</text>
+                    <text class="link-card-url">{{ msg.LinkUrl }}</text>
+                  </view>
                 </view>
               </view>
+              <!-- ------------------ 引用回复正文 ---------------- -->
+              <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
+              <!-- ------------------ 文本 ---------------- -->
+              <text v-else class="msg-text">{{ msg.DisplayText }}</text>
             </view>
-            <!-- ------------------ 文本 ---------------- -->
-            <text v-else class="msg-text">{{ msg.DisplayText }}</text>
+            <!-- ------------------ 引用参考（气泡外部） ---------------- -->
+            <view v-if="msg.MsgType === 22" class="msg-quote-ref-box">
+              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}: </text>
+              <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
+            </view>
           </view>
           <image class="msg-avatar" :src="myAvatar" mode="aspectFill" />
         </view>
@@ -83,7 +106,15 @@
     </scroll-view>
 
     <!-- 底部输入框-->
-    <view class="chat-footer footer-safe-bottom">
+    <view class="chat-footer footer-safe-bottom" :style="{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 'px' : '' }">
+      <!-- 引用预览条 -->
+      <view v-if="quoteMessage" class="quote-preview-bar">
+        <view class="quote-preview-content">
+          <text class="quote-preview-author">{{ quoteAuthor }}</text>
+          <text class="quote-preview-text">: {{ quoteText }}</text>
+        </view>
+        <view class="quote-preview-close" @tap="clearQuote"><text>✕</text></view>
+      </view>
       <view class="footer-input-row">
         <!-- 语音和键盘切换按钮 -->
         <view class="footer-tool-btn" @tap="toggleVoiceMode">
@@ -105,7 +136,7 @@
           placeholder-class="footer-input-placeholder"
           confirm-type="send"
           :focus="isFocus"
-          :adjust-position="true"
+          :adjust-position="false"
           @focus="onInputFocus"
           @blur="onInputBlur"
           @confirm="onSend"
@@ -163,7 +194,7 @@
             </view>
             <text class="panel-label">拍照</text>
           </view>
-          <view class="panel-item" @tap="onPickFile">
+          <!-- <view class="panel-item" @tap="onPickFile">
             <view class="panel-icon-wrap">
               <view class="icon-file">
                 <view class="icon-file-body"></view>
@@ -174,7 +205,7 @@
               </view>
             </view>
             <text class="panel-label">文件</text>
-          </view>
+          </view> -->
           <view class="panel-item" @tap="onSendProduct">
             <view class="panel-icon-wrap">
               <view class="icon-product">
@@ -214,6 +245,29 @@
         <text class="record-tip">{{ recordCancelHint ? '手指移回下方可继续录音' : '上滑取消，松开发送' }}</text>
       </view>
     </view>
+
+    <!-- 微信式长按操作菜单 -->
+    <view v-if="actionMenuVisible" class="msg-action-mask" @tap="hideActionMenu">
+      <view class="msg-action-popup" :style="{ left: actionMenuX + 'px', top: actionMenuY + 'px' }">
+        <view class="msg-action-arrow"></view>
+        <view class="msg-action-list">
+          <view class="msg-action-item" @tap.stop="onActionCopy">
+            <text class="msg-action-icon">⎘</text>
+            <text class="msg-action-label">复制</text>
+          </view>
+          <view class="msg-action-divider"></view>
+          <view class="msg-action-item" @tap.stop="onActionQuote">
+            <text class="msg-action-icon">❝</text>
+            <text class="msg-action-label">引用</text>
+          </view>
+          <view class="msg-action-divider"></view>
+          <view class="msg-action-item" @tap.stop="onActionRevoke">
+            <text class="msg-action-icon">↩</text>
+            <text class="msg-action-label">撤回</text>
+          </view>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -221,6 +275,7 @@
 import { getRecordList, saveRecordByClient } from '../../api/index.js'
 import request from '../../api/request.js'
 import { formatProductImage } from '../../libs/image.js'
+import { getProductImageUrlChat } from '@/common/utils/index.js'
 
 export default {
   data() {
@@ -236,6 +291,7 @@ export default {
       messageList: [],  // 消息列表
       inputText: '',  // 输入内容
       isFocus: false,  // 输入框聚焦状态
+      keyboardHeight: 0,  // 键盘高度（px），用于手动顶起 footer
       showMore: false,  // 显示更多面板
       showEmotion: false,  // 显示表情面板
       hasMore: false,  // 是否有更多历史消息
@@ -256,7 +312,14 @@ export default {
         '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢',
         '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', 
         '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'
-      ]  // 表情列表
+      ],  // 表情列表
+      actionMenuVisible: false,  // 是否显示长按操作菜单
+      actionMenuX: 0,  // 操作菜单水平位置
+      actionMenuY: 0,  // 操作菜单垂直位置
+      actionMenuTarget: null,  // 当前操作菜单对应的消息
+      quoteMessage: null,  // 当前引用的消息对象
+      quoteText: '',  // 引用预览文本
+      quoteAuthor: ''  // 引用消息的发送者名称
     }
   },
   onLoad(options) {
@@ -273,14 +336,36 @@ export default {
     this.categoryId = parts[0] || ''
     this.dataId = parts[1] || ''
 
-    // 获取当前用户ID
+    // 获取当前用户ID和头像
     const userInfo = uni.getStorageSync('userInfo') || {}
     this.myUserId = String(userInfo.UserID || '')
+    // 设置我的头像：有 UserLogo 就用格式化后的真实头像，没有则按性别回退默认头像
+    if (userInfo.UserLogo) {
+      this.myAvatar = getProductImageUrlChat(userInfo.UserLogo)
+    } else if (userInfo.UserSex == 2) {
+      this.myAvatar = 'https://img2cdn.global-dsc.cn/dgzz_img/6842d00b7f7db24082ed4f59f2bba02a.png'
+    }
 
     // 加载聊天记录
     this.loadMessages()
+
+    // ----------- 监听键盘高度变化，手动控制 footer 位置
+    this._keyboardHandler = (res) => {
+      this.keyboardHeight = res.height || 0
+      // 键盘收起时滚动到底部
+      if (res.height === 0 && !this.showMore && !this.showEmotion) {
+        this.$nextTick(() => {
+          this.scrollToId = 'msg-bottom'
+        })
+      }
+    }
+    uni.onKeyboardHeightChange(this._keyboardHandler)
   },
   onUnload() {
+    // 取消键盘高度监听
+    if (this._keyboardHandler) {
+      uni.offKeyboardHeightChange(this._keyboardHandler)
+    }
     // 离开聊天页时清理录音计时器，避免计时器继续运行
     if (this._recordTimer) clearInterval(this._recordTimer)
     // 还在录音时按取消处理，防止离开页面后自动发送
@@ -292,6 +377,8 @@ export default {
     if (this._audioContext) this._audioContext.destroy()
   },
   methods: {
+    getProductImageUrlChat,
+
     // ----------- 点击消息区域，收起所有面板和键盘
     onContentTap() {
       if (this.showMore || this.showEmotion) {
@@ -299,6 +386,8 @@ export default {
         this.showEmotion = false
       }
       if (this.isFocus) {
+        this.isFocus = false
+        this.keyboardHeight = 0
         uni.hideKeyboard()
       }
     },
@@ -391,6 +480,12 @@ export default {
         if (imageMatch) {
           msg.MsgType = 2
           msg.ImageUrl = imageMatch[1].split(',')[0]
+          msg.ImageWidth = Number(msg.ImageWidth) || 0  // 图片原始宽度
+          msg.ImageHeight = Number(msg.ImageHeight) || 0  // 图片原始高度
+        }
+        if (msg.MsgType === 2) {
+          msg.ImageWidth = Number(msg.ImageWidth) || 0  // 图片原始宽度
+          msg.ImageHeight = Number(msg.ImageHeight) || 0  // 图片原始高度
         }
         // 解析语音消息，格式为 <m_audio,bucket/key,时长>
         const audioMatch = String(msg.MsgText || '').match(/<m_audio,([^,>]+),([^>]+)>/i)  // 语音消息匹配结果
@@ -407,8 +502,25 @@ export default {
           msg.LinkTitle = decodeURIComponent(linkMatch[2] || '')  // 链接标题
           msg.LinkLogo = formatProductImage(decodeURIComponent(linkMatch[3] || ''))  // 链接图片
         }
-        // 解析显示文本（将特殊消息标签转为可读文字）
-        msg.DisplayText = this.parseDisplayText(msg.MsgText)
+        // 解析撤回消息提示，格式为 <m_revoke,原消息domain>
+        const revokeMatch = String(msg.MsgText || '').match(/^<m_revoke,([^>]*)>$/i)  // 撤回消息匹配结果
+        if (revokeMatch) {
+          msg.IsRevoke = true  // 标记为撤回提示
+          msg.RevokeText = (String(msg.SendUserID) === String(this.myUserId) ? '您' : (this.interlocutorName || '对方')) + '撤回了一条消息'  // 撤回提示文案
+        }
+        // 解析引用消息，格式为 <m_quote,作者,编码后的引用文本>回复内容</m_quote>
+        const quoteMatch = String(msg.MsgText || '').match(/^<m_quote,([^,>]+),([^>]*)>([\s\S]*)<\/m_quote>$/i)  // 引用消息匹配结果
+        if (quoteMatch) {
+          msg.MsgType = 22  // 引用消息类型
+          msg.QuoteAuthor = quoteMatch[1]  // 被引用消息的作者
+          msg.QuoteText = decodeURIComponent(quoteMatch[2] || '')  // 被引用的消息内容
+          msg.ReplyText = quoteMatch[3] || ''  // 回复内容
+          msg.DisplayText = msg.ReplyText  // 显示文本为回复内容
+        }
+        if (!msg.DisplayText) {
+          // 解析显示文本（将特殊消息标签转为可读文字）
+          msg.DisplayText = this.parseDisplayText(msg.MsgText)
+        }
         // 时间显示：首条消息或与上一条间隔超过1分钟时显示
         if (msg.MsgTime && (!lastTime || this.timeDiffMinutes(msg.MsgTime, lastTime) >= 1)) {
           msg.ShowTime = true
@@ -417,9 +529,23 @@ export default {
       })
     },
 
+    // ----------- 图片加载完成
+    onImageLoad(event, msg) {
+      // 获取图片原始尺寸
+      const imageInfo = event && event.detail ? event.detail : {}  // 图片加载信息
+      const imageWidth = Number(imageInfo.width) || 0  // 图片原始宽度
+      const imageHeight = Number(imageInfo.height) || 0  // 图片原始高度
+      if (!imageWidth || !imageHeight) return
+      msg.ImageWidth = imageWidth
+      msg.ImageHeight = imageHeight
+    },
+
     // ----------- 解析消息文本为可读内
     parseDisplayText(text) {
       if (!text) return ''
+      // 引用消息：提取 </m_quote> 前的回复内容
+      const quoteMatch = text.match(/^<m_quote,[^>]*>([\s\S]*)<\/m_quote>$/i)
+      if (quoteMatch) return quoteMatch[1] || ''
       // 纯文本消息直接返
       if (!/^<m_/.test(text)) return text
       // 特殊消息类型转为占位文字
@@ -435,6 +561,114 @@ export default {
         .replace(/<m_tip,[^>]*>/g, '')
         .replace(/<m_shake>/g, '[窗口抖动]')
         .replace(/<m_revoke,[^>]*>/g, '[撤回了一条消息]')
+    },
+
+    // ----------- 判断消息是否已被撤回
+    isRevokeMsg(msg) {
+      return msg.IsRevoke || /^<m_revoke,[^>]*>$/i.test(String(msg.MsgText || ''))
+    },
+
+    // ----------- 长按消息气泡弹出微信式操作菜单
+    onMsgLongPress(msg, index) {
+      if (String(msg.SendUserID) !== String(this.myUserId)) return  // 只能操作自己发的消息
+      if (this.isRevokeMsg(msg)) return  // 已撤回的消息不再显示菜单
+      this.actionMenuTarget = msg  // 记录当前要操作的消息
+      const selector = '#msg-bubble-' + index  // 气泡选择器
+      uni.createSelectorQuery().in(this).select(selector).boundingClientRect((rect) => {
+        if (!rect) return
+        const systemInfo = uni.getSystemInfoSync()
+        const popupWidth = 210  // 菜单宽度 420rpx 对应的 px 近似值
+        let left = rect.left + rect.width / 2 - popupWidth / 2
+        left = Math.max(20, Math.min(left, systemInfo.windowWidth - popupWidth - 20))
+        const top = rect.top - 110  // 默认显示在气泡上方
+        this.actionMenuX = left
+        this.actionMenuY = top
+        this.actionMenuVisible = true
+      }).exec()
+    },
+
+    // ----------- 隐藏长按操作菜单
+    hideActionMenu() {
+      this.actionMenuVisible = false
+      this.actionMenuTarget = null
+    },
+
+    // ----------- 点击菜单复制
+    onActionCopy() {
+      const target = this.actionMenuTarget
+      this.hideActionMenu()
+      if (!target) return
+      const text = target.DisplayText || target.MsgText || ''
+      if (!text) return
+      uni.setClipboardData({
+        data: text,
+        success: () => uni.showToast({ title: '已复制', icon: 'none' })
+      })
+    },
+
+    // ----------- 点击菜单引用
+    onActionQuote() {
+      const target = this.actionMenuTarget
+      this.hideActionMenu()
+      if (!target) return
+      const text = target.DisplayText || target.MsgText || ''
+      if (!text) return
+      this.quoteMessage = target  // 记录被引用的消息
+      this.quoteText = text  // 引用预览文本
+      this.quoteAuthor = String(target.SendUserID) === String(this.myUserId) ? '我' : (this.interlocutorName || '对方')  // 引用作者名
+      this.inputText = ''  // 清空输入框，等待用户输入回复内容
+      this.isVoiceMode = false
+      this.$nextTick(() => {
+        this.isFocus = true
+      })
+    },
+
+    // ----------- 清除引用
+    clearQuote() {
+      this.quoteMessage = null
+      this.quoteText = ''
+      this.quoteAuthor = ''
+    },
+
+    // ----------- 点击菜单撤回
+    onActionRevoke() {
+      const target = this.actionMenuTarget
+      this.hideActionMenu()
+      if (target) this.revokeMessage(target)
+    },
+
+    // ----------- 撤回消息
+    async revokeMessage(msg) {
+      const msgTime = new Date(msg.MsgTime).getTime()  // 消息发送时间戳
+      if (Date.now() - msgTime > 10 * 60 * 1000) {  // 超过10分钟禁止撤回
+        uni.showToast({ title: '只能撤回10分钟之内的消息', icon: 'none' })
+        return
+      }
+      if (String(msg.SendUserID) !== String(this.myUserId)) {  // 非本人发送的消息不能撤回
+        uni.showToast({ title: '只能撤回自己发送的消息', icon: 'none' })
+        return
+      }
+      const oldDomain = msg.Domain || msg.MsgID  // 被撤回消息的原始 domain
+      const newDomain = this.generateGuid()  // 撤回提示消息的新 domain
+      const revokeText = '<m_revoke,' + oldDomain + '>'  // 撤回消息协议格式
+      try {
+        await saveRecordByClient({
+          RecvDataID: this.dataId,
+          SessionCategoryID: this.categoryId,
+          MsgText: revokeText,
+          Domain: newDomain
+        })
+        // 本地把原消息替换为撤回提示，和 big-engineer 项目 MessageService.revoke 逻辑一致
+        msg.MsgText = revokeText
+        msg.MsgID = newDomain
+        msg.Domain = newDomain
+        msg.IsRevoke = true
+        msg.RevokeText = '您撤回了一条消息'
+        msg.MsgType = 0
+      } catch (e) {
+        console.error('撤回消息失败:', e)
+        uni.showToast({ title: '撤回失败', icon: 'none' })
+      }
     },
 
     // ----------- 计算两个时间相差的分钟数
@@ -467,28 +701,43 @@ export default {
     async onSend() {
       const text = this.inputText.trim()
       if (!text) return
+      // 如果有引用，拼接为 <m_quote,作者,编码后的引用文本>回复内容</m_quote> 格式
+      let sendText = text
+      let displayText = text
+      if (this.quoteMessage) {
+        const encodedQuote = encodeURIComponent(this.quoteText)
+        sendText = '<m_quote,' + this.quoteAuthor + ',' + encodedQuote + '>' + text + '</m_quote>'
+      }
       // 生成消息唯一标识
       const domain = this.generateGuid()
       // 本地先插入消息
       const msg = {
         MsgID: domain,
-        MsgText: text,
-        DisplayText: text,
+        MsgText: sendText,
+        DisplayText: displayText,
         MsgTime: this.formatNow(),
         SendUserID: this.myUserId,
         Domain: domain,
         IsMe: true,
         State: -1
       }
+      // 如果有引用，设置引用相关字段用于本地展示
+      if (this.quoteMessage) {
+        msg.MsgType = 22
+        msg.QuoteAuthor = this.quoteAuthor
+        msg.QuoteText = this.quoteText
+        msg.ReplyText = text
+      }
       this.messageList.push(msg)
       this.inputText = ''
+      this.clearQuote()
       this.scrollToBottom()
       // 调用接口发送
       try {
         await saveRecordByClient({
           RecvDataID: this.dataId,
           SessionCategoryID: this.categoryId,
-          MsgText: text,
+          MsgText: sendText,
           Domain: domain
         })
         msg.State = 1
@@ -536,6 +785,12 @@ export default {
     // ----------- 输入框失焦
     onInputBlur() {
       this.isFocus = false
+      // 延迟重置 keyboardHeight，等键盘收起动画完成
+      setTimeout(() => {
+        if (!this.isFocus) {
+          this.keyboardHeight = 0
+        }
+      }, 100)
     },
 
     // ----------- 切换语音和键盘输入模式
@@ -548,6 +803,7 @@ export default {
       // 切到语音模式时收起键盘，切回文本模式时自动聚焦输入框
       if (this.isVoiceMode) {
         this.isFocus = false
+        this.keyboardHeight = 0
         uni.hideKeyboard()
         return
       }
@@ -593,6 +849,14 @@ export default {
       if (this.isFocus) {
         this.isFocus = false
         uni.hideKeyboard()
+        this.keyboardHeight = 0
+        // 延迟等键盘收起后再开面板
+        setTimeout(() => {
+          this.isVoiceMode = false
+          this.showEmotion = !this.showEmotion
+          this.showMore = false
+        }, 150)
+        return
       }
       this.isVoiceMode = false
       this.showEmotion = !this.showEmotion
@@ -605,6 +869,13 @@ export default {
       if (this.isFocus) {
         this.isFocus = false
         uni.hideKeyboard()
+        this.keyboardHeight = 0
+        // 延迟等键盘收起后再开面板
+        setTimeout(() => {
+          this.showMore = !this.showMore
+          this.showEmotion = false
+        }, 150)
+        return
       }
       this.showMore = !this.showMore
       this.showEmotion = false
@@ -650,7 +921,9 @@ export default {
         SendUserID: this.myUserId,
         Domain: domain,
         IsMe: true,
-        State: -1
+        State: -1,
+        ImageWidth: 0,  // 图片原始宽度
+        ImageHeight: 0  // 图片原始高度
       }  // 先插入列表展示的本地图片消息
       this.messageList.push(msg)
       this.scrollToBottom()
@@ -1189,15 +1462,50 @@ export default {
       uni.showToast({ title: '文件选择功能开发中', icon: 'none' })
     },
 
+    // ----------- 将旧格式产品URL统一转成 product-detail 格式（参考 big-engineer 项目）
+    transformProductDetailUrl(url) {
+      // 格式1: /product/detail/数字?version=数字
+      const regex1 = /(^https:\/\/big-engineer\.global-dsc\.cn)?\/product\/detail\/(\d+)\?version=(\d+)/
+      // 格式2: /?id=数字&version=数字
+      const regex2 = /(^https:\/\/big-engineer\.global-dsc\.cn)?\/\?id=(\d+)&version=(\d+)/
+      let productId = ''  // 产品ID
+      let version = ''  // 版本号
+      let domain = 'https://big-engineer.global-dsc.cn'  // 域名
+      const match1 = url.match(regex1)
+      if (match1) {
+        domain = match1[1] || domain
+        productId = match1[2]
+        version = match1[3]
+      } else {
+        const match2 = url.match(regex2)
+        if (match2) {
+          domain = match2[1] || domain
+          productId = match2[2]
+          version = match2[3]
+        }
+      }
+      // 匹配成功则返回统一格式
+      if (productId && version) {
+        return domain + '/product-detail/?id=' + productId + '&version=' + version
+      }
+      // 非产品页面返回原URL
+      return url
+    },
+
     // ----------- 点击链接卡片跳转
     onLinkTap(msg) {
       if (!msg.LinkUrl) return
-      // 产品详情链接跳转小程序原生页面
-      if (msg.LinkUrl.indexOf('product-detail') > -1) {
-        const idMatch = msg.LinkUrl.match(/[?&]id=(\d+)/)  // 产品ID匹配结果
+      // 先统一URL格式，再判断是否产品详情链接
+      const resultUrl = this.transformProductDetailUrl(msg.LinkUrl)
+      // 产品详情链接跳转到小程序原生页面
+      if (resultUrl.indexOf('product-detail') > -1) {
+        const idMatch = resultUrl.match(/[?&]id=(\d+)/)  // 产品ID匹配结果
         const prodId = idMatch ? idMatch[1] : ''  // 提取的产品ID
         if (prodId) {
-          uni.navigateTo({ url: '/pages-sub/explore/comp-detail/index?prodId=' + prodId })
+          uni.navigateToMiniProgram({
+            appId: 'wx795238050c6d6512',
+            path: '/pagesCurrency/pages/product-detail/index?prodId=' + prodId
+          })
           return
         }
       }
@@ -1226,6 +1534,19 @@ export default {
   height: 100vh;
   background: #ededed;
 
+  /* 引用参考框（气泡外部，微信风格） */
+  .msg-quote-ref-box {
+    background: #e1e2e6;
+    color: gray;
+    font-size: 24rpx;
+    margin-top: 6rpx;
+    padding: 4rpx 12rpx;
+    border-radius: 6rpx;
+    max-width: 100%;
+    box-sizing: border-box;
+    word-break: break-all;
+  }
+
   /* 消息列表 */
   .chat-content {
     flex: 1;
@@ -1240,7 +1561,7 @@ export default {
       padding: 20rpx 0;
       .load-more-text {
         font-size: 22rpx;
-        color: #b2b2b2;
+        color: #989393;
       }
     }
 
@@ -1248,10 +1569,24 @@ export default {
     .time-divider {
       display: flex;
       justify-content: center;
-      padding: 32rpx 0 24rpx;
+      padding: 24rpx 0;
       .time-divider-text {
         font-size: 24rpx;
-        color: #b2b2b2;
+        color: #989393;
+      }
+    }
+
+    /* 撤回提示 */
+    .msg-revoke-tip {
+      display: flex;
+      justify-content: center;
+      padding: 12rpx 0 28rpx;
+      text {
+        font-size: 24rpx;
+        color: #999;
+        background: rgba(0, 0, 0, 0.05);
+        padding: 6rpx 18rpx;
+        border-radius: 8rpx;
       }
     }
 
@@ -1274,6 +1609,9 @@ export default {
         .msg-avatar {
           margin-left: 20rpx;
         }
+        .msg-content-col {
+          align-items: flex-end;
+        }
       }
 
       /* 头像 */
@@ -1285,12 +1623,24 @@ export default {
         background: #d8d8d8;
       }
 
+      /* 消息内容列（气泡+引用框） */
+      .msg-content-col {
+        display: flex;
+        flex-direction: column;
+        width: 75%;
+        max-width: 75%;
+        min-width: 0;
+        align-items: flex-start;
+      }
+
       /* 气泡 */
       .msg-bubble {
+        width: fit-content;
         max-width: 480rpx;
         padding: 18rpx 24rpx;
         border-radius: 10rpx;
         position: relative;
+        box-sizing: border-box;
 
         &.msg-bubble-left {
           background: #fff;
@@ -1336,6 +1686,10 @@ export default {
             border-radius: 8rpx;
             border: 1rpx solid rgba(15, 23, 42, 0.08);
             box-sizing: border-box;
+
+            &.msg-image-landscape {
+              width: 360rpx;
+            }
           }
         }
 
@@ -1365,15 +1719,15 @@ export default {
           .link-card-header {
             display: flex;
             align-items: center;
-            font-size: 22rpx;
-            color: #8a8f99;
+            font-size: 24rpx;
+            color: #8c8c8c;
             padding: 18rpx 24rpx 14rpx;
             border-bottom: 1rpx solid rgba(15, 23, 42, 0.04);
 
             &::before {
               content: '';
-              width: 6rpx;
-              height: 6rpx;
+              width: 14rpx;
+              height: 14rpx;
               border-radius: 50%;
               background: #4a6fa5;
               margin-right: 10rpx;
@@ -1432,7 +1786,7 @@ export default {
               }
 
               .link-card-url {
-                font-size: 20rpx;
+                font-size: 22rpx;
                 color: #a8adb5;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -1501,12 +1855,58 @@ export default {
   /* 底部输入区 */
   .chat-footer {
     flex-shrink: 0;
-    background: rgba(247, 248, 250, 0.98);
+    background: rgba(242, 242, 242, 0.98);
     border-top: 1rpx solid rgba(15, 23, 42, 0.07);
     box-shadow: 0 -8rpx 28rpx rgba(15, 23, 42, 0.04);
 
     &.footer-safe-bottom {
       padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* 引用预览条 */
+    .quote-preview-bar {
+      display: flex;
+      align-items: center;
+      padding: 16rpx 24rpx;
+      background: #f0f0f0;
+      border-bottom: 1rpx solid rgba(0, 0, 0, 0.05);
+
+      .quote-preview-content {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: flex-start;
+        overflow: hidden;
+
+        .quote-preview-author {
+          font-size: 26rpx;
+          color: #576b95;
+          flex-shrink: 0;
+        }
+
+        .quote-preview-text {
+          font-size: 26rpx;
+          color: #888;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+
+      .quote-preview-close {
+        width: 48rpx;
+        height: 48rpx;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 16rpx;
+
+        text {
+          font-size: 28rpx;
+          color: #999;
+        }
+      }
     }
 
     .footer-input-row {
@@ -1555,8 +1955,8 @@ export default {
               background: #272b30;
 
               &:nth-child(1) { height: 9rpx; }
-              &:nth-child(2) { height: 20rpx; }
-              &:nth-child(3) { height: 13rpx; }
+              &:nth-child(2) { height: 14rpx; }
+              &:nth-child(3) { height: 22rpx; }
             }
           }
         }
@@ -2022,5 +2422,75 @@ export default {
 @keyframes record-wave {
   from { transform: scaleY(0.4); opacity: 0.55; }
   to { transform: scaleY(1); opacity: 1; }
+}
+
+/* 微信式长按操作菜单 */
+.msg-action-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: transparent;
+}
+
+.msg-action-popup {
+  position: absolute;
+  z-index: 1001;
+  width: 420rpx;
+  background: #4c4c4c;
+  border-radius: 12rpx;
+  padding: 20rpx 0;
+  box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.25);
+
+  .msg-action-arrow {
+    position: absolute;
+    bottom: -16rpx;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 16rpx solid transparent;
+    border-right: 16rpx solid transparent;
+    border-top: 16rpx solid #4c4c4c;
+  }
+
+  .msg-action-list {
+    display: flex;
+    align-items: center;
+  }
+
+  .msg-action-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24rpx;
+
+    &:active {
+      opacity: 0.7;
+    }
+  }
+
+  .msg-action-divider {
+    width: 1rpx;
+    height: 60rpx;
+    background: rgba(255, 255, 255, 0.15);
+    flex-shrink: 0;
+  }
+
+  .msg-action-icon {
+    font-size: 38rpx;
+    color: #fff;
+    margin-bottom: 10rpx;
+  }
+
+  .msg-action-label {
+    font-size: 22rpx;
+    color: #fff;
+    line-height: 1;
+  }
 }
 </style>

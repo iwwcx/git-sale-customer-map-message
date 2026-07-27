@@ -224,7 +224,7 @@ export default {
 }
 .msg-name {
   font-size: 30rpx;
-  color: #1a1a1a;
+  color: #4c4c4c;
   font-weight: 500;
   max-width: 420rpx;
   white-space: nowrap;
@@ -244,10 +244,11 @@ export default {
 .msg-preview {
   flex: 1;
   font-size: 26rpx;
-  color: #666;
+  color: #8c8c8c;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-top: 6rpx;
 }
 
 .msg-empty {

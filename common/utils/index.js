@@ -63,6 +63,9 @@ export const formatTime = (timeStr) => {
 // 解析消息文本，将自定义标签替换为中文描述
 export const parseMsgText = (text) => {
   if (!text) return ''
+  // 引用消息：提取回复内容
+  const quoteMatch = text.match(/^<m_quote,[^>]*>([\s\S]*)<\/m_quote>$/i)
+  if (quoteMatch) return quoteMatch[1] || ''
   return text
     .replace(/<m_ico,[^>]*>/g, '[表情]')
     .replace(/<m_img,[^>]*>/g, '[图片]')
@@ -72,4 +75,5 @@ export const parseMsgText = (text) => {
     .replace(/<m_link,[^>]*>/g, '[链接]')
     .replace(/<m_data,[^>]*>/g, '[分享]')
     .replace(/<m_shake>/g, '发送了一个窗口抖动')
+    .replace(/<m_revoke,[^>]*>/g, '[撤回了一条消息]')
 }
