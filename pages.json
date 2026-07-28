@@ -112,6 +112,18 @@
 					"style": {
 						"navigationBarTitleText": "发产品"
 					}
+				},
+				{
+					"path": "notice/index",
+					"style": {
+						"navigationBarTitleText": "团队通知"
+					}
+				},
+				{
+					"path": "group/info",
+					"style": {
+						"navigationBarTitleText": "群信息"
+					}
 				}
 			]
 		},

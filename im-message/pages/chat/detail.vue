@@ -5,7 +5,7 @@
       class="chat-content"
       scroll-y
       :scroll-into-view="scrollToId"
-      :scroll-with-animation="true"
+      :scroll-with-animation="scrollWithAnimation"
       @scrolltoupper="loadMore"
       @tap="onContentTap"
     >
@@ -28,8 +28,9 @@
 
         <!-- 对方消息 -->
         <view :key="'msg-left-' + index" class="msg-row msg-row-left" v-else-if="msg.SendUserID !== myUserId">
-          <image class="msg-avatar" :src="interlocutorLogo || defaultAvatar" mode="aspectFill" />
+          <image class="msg-avatar" :src="(groupMembers[msg.SendUserID] && groupMembers[msg.SendUserID].UserLogo) || interlocutorLogo || defaultAvatar" mode="aspectFill" @tap="onAvatarTap" />
           <view class="msg-content-col">
+            <text v-if="categoryId === '52' && groupMembers[msg.SendUserID]" class="msg-sender-name">{{ groupMembers[msg.SendUserID].UserName }}</text>
             <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
               <!-- ------------------ 图片 ---------------- -->
               <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
@@ -97,7 +98,7 @@
               <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
             </view>
           </view>
-          <image class="msg-avatar" :src="myAvatar" mode="aspectFill" />
+          <image class="msg-avatar" :src="myAvatar" mode="aspectFill" @tap="onAvatarTap" />
         </view>
       </template>
 
@@ -248,7 +249,7 @@
 
     <!-- 微信式长按操作菜单 -->
     <view v-if="actionMenuVisible" class="msg-action-mask" @tap="hideActionMenu">
-      <view class="msg-action-popup" :style="{ left: actionMenuX + 'px', top: actionMenuY + 'px' }">
+      <view class="msg-action-popup" :class="{ 'msg-action-popup-below': actionMenuBelow }" :style="{ left: actionMenuX + 'px', top: actionMenuY + 'px' }">
         <view class="msg-action-arrow"></view>
         <view class="msg-action-list">
           <view class="msg-action-item" @tap.stop="onActionCopy">
@@ -272,7 +273,7 @@
 </template>
 
 <script>
-import { getRecordList, saveRecordByClient } from '../../api/index.js'
+import { getRecordList, saveRecordByClient, getGroupUserList } from '../../api/index.js'
 import request from '../../api/request.js'
 import { formatProductImage } from '../../libs/image.js'
 import { getProductImageUrlChat } from '@/common/utils/index.js'
@@ -297,6 +298,7 @@ export default {
       hasMore: false,  // 是否有更多历史消息
       loading: false,  // 加载中状态
       scrollToId: 'msg-bottom',  // 滚动目标
+      scrollWithAnimation: false,  // 是否使用滚动动画，首次加载关闭
       isVoiceMode: false,  // 是否切换到按住说话模式
       isVoicePressing: false,  // 是否正在按住语音按钮
       recordCancelHint: false,  // 当前松手是否需要取消发送
@@ -304,6 +306,7 @@ export default {
       isRecording: false,  // 是否正在录音
       recordSeconds: 0,  // 当前录音秒数
       playingAudioId: '',  // 当前播放中的语音消息ID
+      groupMembers: {},  // 群成员映射表 { UserID: { UserName, UserLogo } }
       emotionList: [
         '😀', '😄', '😁', '😆', '😂', '🤣', '😏', '😅', '🥲', '☺️', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', 
         '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', 
@@ -316,6 +319,7 @@ export default {
       actionMenuVisible: false,  // 是否显示长按操作菜单
       actionMenuX: 0,  // 操作菜单水平位置
       actionMenuY: 0,  // 操作菜单垂直位置
+      actionMenuBelow: false,  // 菜单是否显示在气泡下方
       actionMenuTarget: null,  // 当前操作菜单对应的消息
       quoteMessage: null,  // 当前引用的消息对象
       quoteText: '',  // 引用预览文本
@@ -344,6 +348,11 @@ export default {
       this.myAvatar = getProductImageUrlChat(userInfo.UserLogo)
     } else if (userInfo.UserSex == 2) {
       this.myAvatar = 'https://img2cdn.global-dsc.cn/dgzz_img/6842d00b7f7db24082ed4f59f2bba02a.png'
+    }
+
+    // 如果是群聊，加载群成员列表
+    if (this.categoryId === '52') {
+      this.loadGroupMembers()
     }
 
     // 加载聊天记录
@@ -379,6 +388,22 @@ export default {
   methods: {
     getProductImageUrlChat,
 
+    // ----------- 点击头像（群聊时跳转群信息页）
+    onAvatarTap() {
+      if (this.categoryId === '52') {
+        this.goGroupInfo()
+      }
+    },
+
+    // ----------- 跳转群信息页
+    goGroupInfo() {
+      const name = encodeURIComponent(this.interlocutorName || '')
+      const logo = encodeURIComponent(this.interlocutorLogo || '')
+      uni.navigateTo({
+        url: `/im-message/pages/group/info?groupId=${this.dataId}&name=${name}&logo=${logo}`
+      })
+    },
+
     // ----------- 点击消息区域，收起所有面板和键盘
     onContentTap() {
       if (this.showMore || this.showEmotion) {
@@ -389,6 +414,24 @@ export default {
         this.isFocus = false
         this.keyboardHeight = 0
         uni.hideKeyboard()
+      }
+    },
+
+    // ----------- 加载群成员列表
+    async loadGroupMembers() {
+      try {
+        const res = await getGroupUserList({ groupId: this.dataId })
+        const list = res.Data || res.data || []
+        const members = {}
+        list.forEach((item) => {
+          members[String(item.UserID)] = {
+            UserName: item.UserName || '',
+            UserLogo: item.UserLogo ? getProductImageUrlChat(item.UserLogo) : ''
+          }
+        })
+        this.groupMembers = members
+      } catch (e) {
+        console.error('加载群成员失败:', e)
       }
     },
 
@@ -416,11 +459,12 @@ export default {
         this.messageList = list
         this.hasMore = hasMore
 
-        // 滚动到底部
+        // 滚动到底部（首次加载不用动画）
         this.$nextTick(() => {
           this.scrollToId = ''
           this.$nextTick(() => {
             this.scrollToId = 'msg-bottom'
+            this.scrollWithAnimation = true  // 后续滚动启用动画
           })
         })
       } catch (e) {
@@ -577,12 +621,19 @@ export default {
       uni.createSelectorQuery().in(this).select(selector).boundingClientRect((rect) => {
         if (!rect) return
         const systemInfo = uni.getSystemInfoSync()
-        const popupWidth = 210  // 菜单宽度 420rpx 对应的 px 近似值
+        const rpxToPx = (rpx) => rpx * systemInfo.windowWidth / 750  // rpx 转 px
+        const popupWidth = rpxToPx(360)  // 菜单宽度 360rpx
+        const popupHeight = rpxToPx(88)  // 菜单高度 88rpx
+        const arrowSize = rpxToPx(12)  // 箭头高度 12rpx
+        const gap = rpxToPx(20)  // 箭头尖端与气泡的间距 20rpx
         let left = rect.left + rect.width / 2 - popupWidth / 2
         left = Math.max(20, Math.min(left, systemInfo.windowWidth - popupWidth - 20))
-        const top = rect.top - 110  // 默认显示在气泡上方
+        // 默认显示在气泡上方；若上方空间不足则翻转到气泡下方
+        const aboveTop = rect.top - popupHeight - arrowSize - gap
+        const belowTop = rect.bottom + gap - arrowSize
+        this.actionMenuBelow = aboveTop < 20
         this.actionMenuX = left
-        this.actionMenuY = top
+        this.actionMenuY = this.actionMenuBelow ? belowTop : aboveTop
         this.actionMenuVisible = true
       }).exec()
     },
@@ -750,11 +801,11 @@ export default {
 
     // ----------- 滚动到底部
     scrollToBottom() {
+      this.scrollToId = ''
       this.$nextTick(() => {
-        this.scrollToId = ''
-        this.$nextTick(() => {
+        setTimeout(() => {
           this.scrollToId = 'msg-bottom'
-        })
+        }, 50)
       })
     },
 
@@ -1540,7 +1591,7 @@ export default {
     color: gray;
     font-size: 24rpx;
     margin-top: 6rpx;
-    padding: 4rpx 12rpx;
+    padding: 8rpx 16rpx;
     border-radius: 6rpx;
     max-width: 100%;
     box-sizing: border-box;
@@ -1553,6 +1604,14 @@ export default {
     overflow: hidden;
     padding: 0 20rpx;
     box-sizing: border-box;
+
+    /* 隐藏滚动条但保留滚动 */
+    ::-webkit-scrollbar {
+      display: none;
+      width: 0;
+      height: 0;
+    }
+    scrollbar-width: none;
 
     /* 加载更多 */
     .load-more-tip {
@@ -1580,12 +1639,12 @@ export default {
     .msg-revoke-tip {
       display: flex;
       justify-content: center;
-      padding: 12rpx 0 28rpx;
+      padding: 0 0 22rpx;
       text {
         font-size: 24rpx;
         color: #999;
         background: rgba(0, 0, 0, 0.05);
-        padding: 6rpx 18rpx;
+        padding: 8rpx 24rpx;
         border-radius: 8rpx;
       }
     }
@@ -1595,7 +1654,7 @@ export default {
       display: flex;
       align-items: flex-start;
       margin-top: 0;
-      margin-bottom: 40rpx;
+      margin-bottom: 32rpx;
 
       &.msg-row-left {
         flex-direction: row;
@@ -1623,6 +1682,17 @@ export default {
         background: #d8d8d8;
       }
 
+      /* 群聊发送人名称 */
+      .msg-sender-name {
+        font-size: 24rpx;
+        color: #999;
+        margin-bottom: 10rpx;
+        max-width: 400rpx;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       /* 消息内容列（气泡+引用框） */
       .msg-content-col {
         display: flex;
@@ -1636,8 +1706,8 @@ export default {
       /* 气泡 */
       .msg-bubble {
         width: fit-content;
-        max-width: 480rpx;
-        padding: 18rpx 24rpx;
+        max-width: 510rpx;
+        padding: 18rpx 22rpx;
         border-radius: 10rpx;
         position: relative;
         box-sizing: border-box;
@@ -1710,7 +1780,6 @@ export default {
 
         /* 链接卡片 */
         .msg-link-card {
-          width: 480rpx;
           border-radius: 16rpx;
           overflow: hidden;
           background: #fff;
@@ -1721,7 +1790,7 @@ export default {
             align-items: center;
             font-size: 24rpx;
             color: #8c8c8c;
-            padding: 18rpx 24rpx 14rpx;
+            padding: 18rpx 26rpx 14rpx;
             border-bottom: 1rpx solid rgba(15, 23, 42, 0.04);
 
             &::before {
@@ -1738,7 +1807,7 @@ export default {
           .link-card-body {
             display: flex;
             align-items: center;
-            padding: 22rpx 24rpx;
+            padding: 24rpx 26rpx;
 
             .link-card-logo {
               width: 88rpx;
@@ -2438,22 +2507,33 @@ export default {
 .msg-action-popup {
   position: absolute;
   z-index: 1001;
-  width: 420rpx;
-  background: #4c4c4c;
+  width: 360rpx;
+  background: #2b2b2b;
   border-radius: 12rpx;
-  padding: 20rpx 0;
-  box-shadow: 0 8rpx 30rpx rgba(0, 0, 0, 0.25);
+  padding: 14rpx 0;
+  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.2);
 
   .msg-action-arrow {
     position: absolute;
-    bottom: -16rpx;
+    bottom: -12rpx;
     left: 50%;
     transform: translateX(-50%);
     width: 0;
     height: 0;
-    border-left: 16rpx solid transparent;
-    border-right: 16rpx solid transparent;
-    border-top: 16rpx solid #4c4c4c;
+    border-left: 12rpx solid transparent;
+    border-right: 12rpx solid transparent;
+    border-top: 12rpx solid #2b2b2b;
+  }
+
+  &.msg-action-popup-below {
+    .msg-action-arrow {
+      bottom: auto;
+      top: -12rpx;
+      border-top: none;
+      border-left: 12rpx solid transparent;
+      border-right: 12rpx solid transparent;
+      border-bottom: 12rpx solid #2b2b2b;
+    }
   }
 
   .msg-action-list {
@@ -2467,24 +2547,24 @@ export default {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 0 24rpx;
+    padding: 0 16rpx;
 
     &:active {
-      opacity: 0.7;
+      opacity: 0.55;
     }
   }
 
   .msg-action-divider {
     width: 1rpx;
-    height: 60rpx;
-    background: rgba(255, 255, 255, 0.15);
+    height: 44rpx;
+    background: rgba(255, 255, 255, 0.12);
     flex-shrink: 0;
   }
 
   .msg-action-icon {
-    font-size: 38rpx;
+    font-size: 32rpx;
     color: #fff;
-    margin-bottom: 10rpx;
+    margin-bottom: 6rpx;
   }
 
   .msg-action-label {

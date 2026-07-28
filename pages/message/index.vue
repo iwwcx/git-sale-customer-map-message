@@ -19,7 +19,13 @@
             <image
               v-if="item.SessionCategoryID == 52"
               class="msg-avatar"
-              src="https://img2cdn.global-dsc.cn/dgzz_img/71efaaeefc353c09d5ccde4bd1a15310.png"
+              src="https://img2cdn.global-dsc.cn/dgzz_img/6ddfb1a24a56be29919936e7e6641f76.jpg"
+              mode="aspectFill"
+            />
+            <image
+              v-else-if="item.SessionCategoryID == 54"
+              class="msg-avatar"
+              src="https://img2cdn.global-dsc.cn/dgzz_img/9f804858d1f0854707bd90b942326fe6.jpg"
               mode="aspectFill"
             />
             <image
@@ -38,7 +44,11 @@
           <!-- 消息内容 -->
           <view class="msg-content">
             <view class="msg-row-top">
-              <text class="msg-name">{{ item.SessionName }}</text>
+              <view class="msg-name-wrap">
+                <text class="msg-name">{{ item.SessionName }}</text>
+                <text v-if="item.SessionCategoryID == 52" class="msg-group-tag">群聊</text>
+                <text v-if="item.SessionCategoryID == 54" class="msg-notice-tag">通知</text>
+              </view>
               <text class="msg-time">{{ formatTime(item.LastSendTime) }}</text>
             </view>
             <view class="msg-row-bottom">
@@ -59,7 +69,7 @@
 </template>
 
 <script>
-import { getChatList } from '@/im-message/api/index.js'
+import { getChatList, getSummary } from '@/im-message/api/index.js'
 import { getProductImageUrlChat, formatTime, parseMsgText } from '@/common/utils/index.js'
 
 export default {
@@ -68,10 +78,14 @@ export default {
       chatList: [], // 会话列表
       loading: false, // loading-overlay 显示状态
       refreshing: false, // 下拉刷新状态
-      avatarErrorMap: {} // 头像加载失败的 ID 映射
+      avatarErrorMap: {}, // 头像加载失败的 ID 映射
+      summaryCache: {}, // 概要信息缓存 'type:id' -> { DataTitle }
+      myUserId: '' // 当前用户ID
     }
   },
   onLoad() {
+    const userInfo = uni.getStorageSync('userInfo') || {}
+    this.myUserId = String(userInfo.UserID || '')
     this.getChatList()
   },
   methods: {
@@ -82,6 +96,8 @@ export default {
         const res = await getChatList()
         // 过滤掉 LastSendText 为空的会话
         this.chatList = (res.Data || []).filter(item => item.LastSendText)
+        // 翻译团队通知的占位符
+        this.translateNoticeList()
       } finally {
         this.loading = false
       }
@@ -94,9 +110,62 @@ export default {
         const res = await getChatList()
         // 过滤掉 LastSendText 为空的会话
         this.chatList = (res.Data || []).filter(item => item.LastSendText)
+        // 翻译团队通知的占位符
+        this.translateNoticeList()
       } finally {
         this.refreshing = false
       }
+    },
+
+    // ----------- 翻译团队通知列表中的占位符
+    async translateNoticeList() {
+      const noticeItems = this.chatList.filter(item => item.SessionCategoryID == 54)
+      for (const item of noticeItems) {
+        const translated = await this.translateNoticeText(item.LastSendText)
+        this.$set(item, 'LastSendText', translated)
+      }
+    },
+
+    // ----------- 翻译单条文本中的 {U:xxx} {G:xxx} 为用户名/群名
+    async translateNoticeText(text) {
+      if (!text) return text
+      const regexp = /\{(U|G):(\d+)\}/gi
+      const matches = text.match(regexp)
+      if (!matches || !matches.length) return text
+      // 收集需要查询的唯一 key
+      const keys = [...new Set(matches.map(m => {
+        const [, type, id] = m.match(/\{(U|G):(\d+)\}/i)
+        return `${type}:${id}`
+      }))]
+      // 查询所有未缓存的概要信息
+      const summaries = {}
+      await Promise.all(keys.map(async (key) => {
+        if (this.summaryCache[key]) {
+          summaries[key] = this.summaryCache[key]
+          return
+        }
+        const [type, id] = key.split(':')
+        const categoryId = type === 'U' ? 20 : 52
+        try {
+          const res = await getSummary(categoryId, id)
+          const info = res.Data || res
+          const title = info.ViewName || info.UserName || info.IMGroupName || info.DataTitle || id
+          this.summaryCache[key] = { DataTitle: title }
+          summaries[key] = this.summaryCache[key]
+        } catch (e) {
+          summaries[key] = { DataTitle: id }
+        }
+      }))
+      // 替换占位符
+      let translated = text
+      matches.forEach(m => {
+        const [, type, id] = m.match(/\{(U|G):(\d+)\}/i)
+        const key = `${type}:${id}`
+        const summary = summaries[key] || { DataTitle: id }
+        const display = type === 'U' && id === this.myUserId ? '您' : summary.DataTitle
+        translated = translated.replace(m, display)
+      })
+      return translated
     },
 
     // ----------- 点击消息项跳转聊天详情
@@ -104,6 +173,12 @@ export default {
       const token = uni.getStorageSync('token')
       if (!token) {
         uni.navigateTo({ url: '/pages/common/login/index' })
+        return
+      }
+
+      // 团队通知跳转到通知页面
+      if (record.SessionCategoryID == 54) {
+        uni.navigateTo({ url: '/im-message/pages/notice/index' })
         return
       }
 
@@ -222,18 +297,43 @@ export default {
   align-items: center;
   margin-bottom: 8rpx;
 }
+.msg-name-wrap {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+}
 .msg-name {
   font-size: 30rpx;
   color: #4c4c4c;
   font-weight: 500;
-  max-width: 420rpx;
+  max-width: 380rpx;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.msg-group-tag {
+  font-size: 20rpx;
+  color: #fff;
+  background: #4cbc84;
+  border-radius: 8rpx;
+  padding: 6rpx 10rpx;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+.msg-notice-tag {
+  font-size: 20rpx;
+  color: #fff;
+  background: #fa9d3b;
+  border-radius: 8rpx;
+  padding: 6rpx 10rpx;
+  margin-left: 8rpx;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
 .msg-time {
-  font-size: 22rpx;
-  color: #c8c8c8;
+  font-size: 24rpx;
+  color: #a0a0a0;
   flex-shrink: 0;
   margin-left: 16rpx;
 }

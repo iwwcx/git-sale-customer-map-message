@@ -10,6 +10,35 @@ export function getChatList(params) {
   });
 }
 
+// 获取群成员列表
+export function getGroupUserList(params) {
+  return request({
+    url: '/im/GroupUserList',
+    method: 'get',
+    params, // { groupId }
+    apiKey: 'profitapi'
+  });
+}
+
+// 获取团队通知列表
+export function getGroupNoticeList(params) {
+  return request({
+    url: '/im/group/GroupNoticeList',
+    method: 'get',
+    params, // { noticeId, pageSize }
+    apiKey: 'api60'
+  });
+}
+
+// 获取用户或群组概要信息（categoryId: 20=用户, 52=群组）
+export function getSummary(categoryId, dataId) {
+  return request({
+    url: `/data/${categoryId}/info?DataId=${dataId}`,
+    method: 'get',
+    apiKey: 'api60'
+  });
+}
+
 // 获取聊天记录列表
 export function getRecordList(params) {
   return request({
