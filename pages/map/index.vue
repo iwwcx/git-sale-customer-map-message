@@ -250,7 +250,6 @@ export default {
       uni.getLocation({
         type: 'gcj02',
         success: (res) => {
-          console.log('定位成功:', res)
           this.latitude = res.latitude
           this.longitude = res.longitude
           // 保存到本地缓存（全局使用）
@@ -343,7 +342,6 @@ export default {
       uni.getLocation({
         type: 'gcj02',
         success: async (res) => {
-          console.log("--------------------定位成功", res)
           this.latitude = res.latitude
           this.longitude = res.longitude
 

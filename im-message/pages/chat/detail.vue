@@ -67,30 +67,34 @@
         <!-- 自己消息 -->
         <view :key="'msg-right-' + index" class="msg-row msg-row-right" v-else>
           <view class="msg-content-col">
-            <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
-              <!-- ------------------ 图片 ---------------- -->
-              <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
-              <!-- ------------------ 语音 ---------------- -->
-              <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
-                <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
-                <text class="audio-duration">{{ msg.AudioDuration }}″</text>
-              </view>
-              <!-- ------------------ 链接卡片 ---------------- -->
-              <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
-                <text class="link-card-header">分享链接</text>
-                <view class="link-card-body">
-                  <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
-                  <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
-                  <view class="link-card-info">
-                    <text class="link-card-title">{{ msg.LinkTitle }}</text>
-                    <text class="link-card-url">{{ msg.LinkUrl }}</text>
+            <view class="msg-bubble-wrap-right">
+              <!-- 已读/未读标记（仅单聊，群聊和通知不显示） -->
+              <text v-if="showReadStatus(msg)" class="msg-read-status" :class="{ 'msg-read-unread': msg.IsRead === 0 }">{{ msg.IsRead === 1 ? '已读' : '未读' }}</text>
+              <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
+                <!-- ------------------ 图片 ---------------- -->
+                <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
+                <!-- ------------------ 语音 ---------------- -->
+                <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
+                  <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
+                  <text class="audio-duration">{{ msg.AudioDuration }}″</text>
+                </view>
+                <!-- ------------------ 链接卡片 ---------------- -->
+                <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
+                  <text class="link-card-header">分享链接</text>
+                  <view class="link-card-body">
+                    <image v-if="msg.LinkLogo" class="link-card-logo" :src="msg.LinkLogo" mode="aspectFill" />
+                    <view v-else class="link-card-logo-placeholder"><text>📦</text></view>
+                    <view class="link-card-info">
+                      <text class="link-card-title">{{ msg.LinkTitle }}</text>
+                      <text class="link-card-url">{{ msg.LinkUrl }}</text>
+                    </view>
                   </view>
                 </view>
+                <!-- ------------------ 引用回复正文 ---------------- -->
+                <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
+                <!-- ------------------ 文本 ---------------- -->
+                <text v-else class="msg-text">{{ msg.DisplayText }}</text>
               </view>
-              <!-- ------------------ 引用回复正文 ---------------- -->
-              <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
-              <!-- ------------------ 文本 ---------------- -->
-              <text v-else class="msg-text">{{ msg.DisplayText }}</text>
             </view>
             <!-- ------------------ 引用参考（气泡外部） ---------------- -->
             <view v-if="msg.MsgType === 22" class="msg-quote-ref-box">
@@ -275,6 +279,9 @@
 <script>
 import { getRecordList, saveRecordByClient, getGroupUserList } from '../../api/index.js'
 import request from '../../api/request.js'
+import { IMService } from '../../services/im.js'
+import { MessageService } from '../../services/message.js'
+import { RecentService } from '../../services/recent.js'
 import { formatProductImage } from '../../libs/image.js'
 import { getProductImageUrlChat } from '@/common/utils/index.js'
 
@@ -332,6 +339,10 @@ export default {
     this.interlocutorKey = decodeURIComponent(key || '')  // 会话标识，格式 "CategoryId:DataId"
     this.interlocutorName = decodeURIComponent(name || '')  // 对方昵称，用于导航栏标题
     this.interlocutorLogo = decodeURIComponent(logo || '')  // 对方头像URL
+    // 列表页传来的头像是相对路径 key，需要拼 CDN 域名；完整 URL 直接使用
+    if (this.interlocutorLogo && !/^https?:\/\//.test(this.interlocutorLogo)) {
+      this.interlocutorLogo = getProductImageUrlChat(this.interlocutorLogo)
+    }
     // 设置导航栏标题为对方名称，没有则默认显示"聊天"
     uni.setNavigationBarTitle({ title: this.interlocutorName || '聊天' })
 
@@ -358,6 +369,14 @@ export default {
     // 加载聊天记录
     this.loadMessages()
 
+    // 登录 IM 并订阅本会话实时消息（失败有重连机制，这里静默处理）
+    IMService.login().catch(() => {})
+    this._messageHandler = (event) => this.onRealtimeMessage(event)  // 实时消息回调引用，取消订阅时用
+    MessageService.subscribe(this.interlocutorKey, this._messageHandler)
+    RecentService.setCurrentChat(this.interlocutorKey)
+    // 清空本会话未读数并给对方发已读回执
+    RecentService.read(this.interlocutorKey)
+
     // ----------- 监听键盘高度变化，手动控制 footer 位置
     this._keyboardHandler = (res) => {
       this.keyboardHeight = res.height || 0
@@ -371,6 +390,9 @@ export default {
     uni.onKeyboardHeightChange(this._keyboardHandler)
   },
   onUnload() {
+    // 取消实时消息订阅并清除当前会话标记
+    MessageService.unsubscribe(this.interlocutorKey, this._messageHandler)
+    RecentService.clearCurrentChat()
     // 取消键盘高度监听
     if (this._keyboardHandler) {
       uni.offKeyboardHeightChange(this._keyboardHandler)
@@ -510,6 +532,10 @@ export default {
     processMessages(messages) {
       let lastTime = ''
       messages.forEach((msg) => {
+        // 自己发的消息 IsRead 兜底：服务端对对方未读的历史消息会返回 null/缺失，统一按未读处理
+        if (String(msg.SendUserID) === String(this.myUserId) && (msg.IsRead === undefined || msg.IsRead === null)) {
+          msg.IsRead = 0
+        }
         // 解码 HTML 实体
         if (msg.MsgText) {
           msg.MsgText = msg.MsgText
@@ -523,7 +549,17 @@ export default {
         const imageMatch = String(msg.MsgText || '').match(/<m_img,(?:url:)?([^>]+)>/i)  // 图片消息匹配结果
         if (imageMatch) {
           msg.MsgType = 2
-          msg.ImageUrl = imageMatch[1].split(',')[0]
+          let imgPath = imageMatch[1].split(',')[0]  // 图片路径，可能是完整URL或相对路径
+          // 完整URL直接使用
+          if (/^https?:\/\//i.test(imgPath)) {
+            msg.ImageUrl = imgPath
+          } else if (imgPath.startsWith('big-engineer')) {
+            // PC端发送的图片，去掉 big-engineer 前缀拼 prodimg 域名
+            msg.ImageUrl = 'https://prodimg.global-dsc.cn' + imgPath.replace('big-engineer', '') + '?x-oss-process=image/resize,w_400'
+          } else {
+            // 其他相对路径，直接拼 prodimg 域名
+            msg.ImageUrl = 'https://prodimg.global-dsc.cn' + (imgPath.startsWith('/') ? imgPath : '/' + imgPath) + '?x-oss-process=image/resize,w_400'
+          }
           msg.ImageWidth = Number(msg.ImageWidth) || 0  // 图片原始宽度
           msg.ImageHeight = Number(msg.ImageHeight) || 0  // 图片原始高度
         }
@@ -703,6 +739,7 @@ export default {
       const newDomain = this.generateGuid()  // 撤回提示消息的新 domain
       const revokeText = '<m_revoke,' + oldDomain + '>'  // 撤回消息协议格式
       try {
+        await this.sendToPeer(revokeText, newDomain)  // 先通过 IM SDK 实时通知对端撤回
         await saveRecordByClient({
           RecvDataID: this.dataId,
           SessionCategoryID: this.categoryId,
@@ -727,6 +764,41 @@ export default {
       const d1 = new Date(time1).getTime()
       const d2 = new Date(time2).getTime()
       return Math.abs(d1 - d2) / (1000 * 60)
+    },
+
+    // ----------- 处理实时消息事件（新消息/撤回/已读回执）
+    onRealtimeMessage(event) {
+      if (event.type === 'message') {
+        // 新消息：解析展示字段后追加到列表底部
+        const message = event.message  // 新消息对象
+        this.processMessages([message])
+        // 与上一条消息间隔小于1分钟时不重复显示时间分割线
+        const lastMessage = this.messageList[this.messageList.length - 1]  // 当前最后一条消息
+        message.ShowTime = !lastMessage || this.timeDiffMinutes(message.MsgTime, lastMessage.MsgTime) >= 1
+        this.messageList.push(message)
+        this.scrollToBottom()
+      } else if (event.type === 'revoke') {
+        // 撤回：把目标消息替换为撤回提示
+        const target = this.messageList.find((msg) => msg.Domain === event.domain)  // 被撤回的消息
+        if (target) {
+          target.MsgText = '<m_revoke,' + event.domain + '>'
+          target.IsRevoke = true
+          target.RevokeText = (String(event.sender) === String(this.myUserId) ? '您' : (this.interlocutorName || '对方')) + '撤回了一条消息'
+          target.MsgType = 0
+        }
+      } else if (event.type === 'read') {
+        // 已读回执：把自己发的消息都标记为已读
+        this.messageList.forEach((msg) => {
+          if (String(msg.SendUserID) === String(this.myUserId)) {
+            msg.IsRead = 1
+          }
+        })
+      }
+    },
+
+    // ----------- 通过 IM SDK 实时发送消息给对端（失败抛错由调用方处理）
+    async sendToPeer(msgText, domain) {
+      await IMService.send(String(this.dataId), msgText, domain, this.categoryId === '52')
     },
 
     // ----------- 格式化消息时间显示
@@ -770,7 +842,8 @@ export default {
         SendUserID: this.myUserId,
         Domain: domain,
         IsMe: true,
-        State: -1
+        State: -1,
+        IsRead: 0  // 已读状态，对方已读回执到达后更新
       }
       // 如果有引用，设置引用相关字段用于本地展示
       if (this.quoteMessage) {
@@ -785,6 +858,7 @@ export default {
       this.scrollToBottom()
       // 调用接口发送
       try {
+        await this.sendToPeer(sendText, domain)  // 先通过 IM SDK 实时送达对端
         await saveRecordByClient({
           RecvDataID: this.dataId,
           SessionCategoryID: this.categoryId,
@@ -997,6 +1071,7 @@ export default {
         if (!displayDomain) throw new Error('图片访问地址无效')
         const imageUrl = displayDomain + '/' + options.key  // 图片最终公开地址
         const msgText = '<m_img,url:' + imageUrl + '>'  // 与参考项目一致的图片消息格式
+        await this.sendToPeer(msgText, domain)  // 先通过 IM SDK 实时送达对端
         await saveRecordByClient({
           RecvDataID: this.dataId,
           SessionCategoryID: this.categoryId,
@@ -1398,6 +1473,7 @@ export default {
         if (!displayDomain) throw new Error('语音访问地址无效')
         const audioPath = displayDomain + '/' + options.key  // 可以直接播放的语音公开地址
         const msgText = '<m_audio,' + audioPath + ',' + duration + '>'  // 语音消息标准格式
+        await this.sendToPeer(msgText, domain)  // 先通过 IM SDK 实时送达对端
         // 保存标准语音消息，对方会根据公开地址和时长展示、播放
         await saveRecordByClient({
           RecvDataID: this.dataId,
@@ -1564,6 +1640,20 @@ export default {
       uni.navigateTo({ url: '/pages-sub/web-view/index?url=' + encodeURIComponent(msg.LinkUrl) })
     },
 
+    // ----------- 判断是否显示已读/未读状态（仅单聊，群聊和通知不显示）
+    showReadStatus(msg) {
+      // 群聊和通知不显示已读未读
+      if (this.categoryId === '52' || this.categoryId === '54') return false
+      // 只显示自己发的消息的已读未读状态
+      if (String(msg.SendUserID) !== String(this.myUserId)) return false
+      // 撤回消息不显示
+      if (msg.IsRevoke) return false
+      // 本地待发送的消息（State === -1）不显示
+      if (msg.State === -1) return false
+      // IsRead 字段必须存在才显示
+      return msg.IsRead !== undefined && msg.IsRead !== null
+    },
+
     // ----------- 跳转发产品页面
     onSendProduct() {
       this.showMore = false
@@ -1670,6 +1760,24 @@ export default {
         }
         .msg-content-col {
           align-items: flex-end;
+        }
+        /* 右侧气泡行容器（包含已读未读标记和气泡） */
+        .msg-bubble-wrap-right {
+          display: flex;
+          flex-direction: row;
+          align-items: flex-end;
+          max-width: 100%;
+        }
+        /* 已读/未读标记文字 */
+        .msg-read-status {
+          font-size: 22rpx;
+          color: #b2b2b2;
+          margin-right: 12rpx;
+          margin-bottom: 8rpx;
+          flex-shrink: 0;
+          &.msg-read-unread {
+            color: #ff3a0d;
+          }
         }
       }
 

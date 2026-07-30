@@ -59,6 +59,35 @@ export function saveRecordByClient(data) {
   });
 }
 
+// 获取网易云信登录 token（IM SDK 登录用，对应 big 项目 /im/generateToken）
+export function generateToken() {
+  return request({
+    url: '/im/generateToken',
+    method: 'get',
+    apiKey: 'api80'
+  });
+}
+
+// 开始会话（新会话同步到服务端，对应 big 项目 /im/StartChat）
+export function startChat(params) {
+  return request({
+    url: '/im/StartChat',
+    method: 'post',
+    params, // { chatCategoryId, chatDataId }
+    apiKey: 'api60'
+  });
+}
+
+// 清空会话未读数（对应 big 项目 /im/ResetChat）
+export function resetChat(params) {
+  return request({
+    url: '/im/ResetChat',
+    method: 'post',
+    params, // { chatId, sendUserId? }
+    apiKey: 'api60'
+  });
+}
+
 // ----------- 获取企业产品列表
 export function getCompanyProductList(params) {
   return request({

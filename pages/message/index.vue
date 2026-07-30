@@ -70,6 +70,8 @@
 
 <script>
 import { getChatList, getSummary } from '@/im-message/api/index.js'
+import { IMService } from '@/im-message/services/im.js'
+import { RecentService } from '@/im-message/services/recent.js'
 import { getProductImageUrlChat, formatTime, parseMsgText } from '@/common/utils/index.js'
 
 export default {
@@ -86,16 +88,24 @@ export default {
   onLoad() {
     const userInfo = uni.getStorageSync('userInfo') || {}
     this.myUserId = String(userInfo.UserID || '')
+    // 登录 IM 并订阅会话列表变化（新消息置顶、未读数实时更新，失败有重连机制）
+    IMService.login().catch(() => {})
+    this._recentHandler = (list) => this.onRecentChange(list)  // 会话列表变化回调引用，取消订阅时用
+    RecentService.subscribe(this._recentHandler)
     this.getChatList()
+  },
+  onUnload() {
+    // 取消会话列表订阅
+    RecentService.unsubscribe(this._recentHandler)
   },
   methods: {
     // ----------- 获取会话列表
     async getChatList() {
       this.loading = true
       try {
-        const res = await getChatList()
+        await RecentService.init(true)
         // 过滤掉 LastSendText 为空的会话
-        this.chatList = (res.Data || []).filter(item => item.LastSendText)
+        this.chatList = RecentService.getList().filter(item => item.LastSendText)
         // 翻译团队通知的占位符
         this.translateNoticeList()
       } finally {
@@ -103,13 +113,21 @@ export default {
       }
     },
 
+    // ----------- 会话列表实时变化（新消息置顶、未读数更新）
+    onRecentChange(list) {
+      // 过滤掉 LastSendText 为空的会话
+      this.chatList = list.filter(item => item.LastSendText)
+      // 翻译团队通知的占位符
+      this.translateNoticeList()
+    },
+
     // ----------- 下拉刷新
     async onRefresh() {
       this.refreshing = true
       try {
-        const res = await getChatList()
+        await RecentService.init(true)
         // 过滤掉 LastSendText 为空的会话
-        this.chatList = (res.Data || []).filter(item => item.LastSendText)
+        this.chatList = RecentService.getList().filter(item => item.LastSendText)
         // 翻译团队通知的占位符
         this.translateNoticeList()
       } finally {
@@ -122,7 +140,7 @@ export default {
       const noticeItems = this.chatList.filter(item => item.SessionCategoryID == 54)
       for (const item of noticeItems) {
         const translated = await this.translateNoticeText(item.LastSendText)
-        this.$set(item, 'LastSendText', translated)
+        item.LastSendText = translated
       }
     },
 
@@ -202,7 +220,7 @@ export default {
 
     // ----------- 头像加载失败回调
     onAvatarError(item) {
-      this.$set(this.avatarErrorMap, item.ID, true)
+      this.avatarErrorMap[item.ID] = true
     },
 
     getProductImageUrlChat,
@@ -312,9 +330,9 @@ export default {
   text-overflow: ellipsis;
 }
 .msg-group-tag {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #fff;
-  background: #4cbc84;
+  background: #fa9d3b;
   border-radius: 8rpx;
   padding: 6rpx 10rpx;
   margin-left: 8rpx;
@@ -322,9 +340,9 @@ export default {
   line-height: 1.2;
 }
 .msg-notice-tag {
-  font-size: 20rpx;
+  font-size: 22rpx;
   color: #fff;
-  background: #fa9d3b;
+  background: #4cbc84;
   border-radius: 8rpx;
   padding: 6rpx 10rpx;
   margin-left: 8rpx;

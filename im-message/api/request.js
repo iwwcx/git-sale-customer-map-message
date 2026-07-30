@@ -115,6 +115,11 @@ const createRequest = (apiKey = 'api60') => {
         success: (response) => {
           const res = response.data; // 接口业务返回体
           const $uni = getUni();
+          // 非 JSON 响应（如 generateToken 返回的纯文本 token）直接返回，不走业务 code 校验
+          if (res === null || typeof res !== 'object') {
+            resolve(res);
+            return;
+          }
           // 拦截业务 code（HTTP 200 但 body 里 code 表示鉴权失败的情况）
           // 同时也拦截 HTTP 状态码（部分网关会用 statusCode 标识 4xx/5xx）
           const bizCode = res && (res.code || res.Code);
