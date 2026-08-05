@@ -25,7 +25,6 @@
       <!-- 左侧分类侧栏 -->
       <scroll-view v-if="activeTab !== 2" class="dir-sidebar" scroll-y>
         <view v-for="dir in currentState.directories" :key="dir.DirID" class="dir-item" :class="{ active: String(currentState.dirId) === String(dir.DirID) }" @tap="selectDirectory(dir)">
-          <view class="dir-indicator"></view>
           <text class="dir-name">{{ dir.DirName }}</text>
         </view>
       </scroll-view>
@@ -72,8 +71,12 @@
     <!-- 底部发送栏 -->
     <view class="bottom-bar">
       <view class="selected-area">
-        <text class="selected-label">已选产品</text>
-        <view class="selected-count" :class="{ active: selectedProducts.length }">{{ selectedProducts.length }}</view>
+        <!-- 已选产品缩略图堆叠，最多显示 3 张 -->
+        <view class="selected-thumbs">
+          <image v-for="item in selectedProducts.slice(0, 4)" :key="item.ProdID" class="thumb-img" :src="formatProductImage(item.ProdLogo)" mode="aspectFill" />
+          <view v-if="!selectedProducts.length" class="thumb-empty"><text>📦</text></view>
+        </view>
+        <text class="selected-label">已选 <text class="selected-num" :class="{ active: selectedProducts.length }">{{ selectedProducts.length }}</text> 件产品</text>
       </view>
       <view class="send-btn" :class="{ active: selectedProducts.length && !sending }" @tap="sendSelectedProducts">
         <text>{{ sending ? '发送中...' : '发送产品' }}</text>
@@ -85,6 +88,9 @@
 <script>
 import { getCompanyProductList, getCompanyProductDirList, getCollectProductDirList, getCollectProductList, getBrowseProductList, saveRecordByClient } from '../../api/index.js'
 import { formatProductImage } from '../../libs/image.js'
+import { RecentService } from '../../services/recent.js'
+import { IMService } from '../../services/im.js'
+import { dateFormat, getUser } from '../../services/util.js'
 
 export default {
   data() {
@@ -288,7 +294,18 @@ export default {
       const title = encodeURIComponent(productName + (product.CompName ? '-' + product.CompName : '') + '-大工程师') // 产品卡片标题
       const logo = encodeURIComponent(product.ProdLogo || '') // 产品卡片图片
       const messageText = '<m_link,' + productUrl + ',' + title + ',' + logo + ',>' // 产品链接消息
-      return saveRecordByClient({ RecvDataID: this.dataId, SessionCategoryID: this.categoryId, MsgText: messageText, Domain: this.generateGuid() })
+      const domain = this.generateGuid() // 消息唯一标识
+      // 先通过 IM SDK 实时推送，再保存到服务器，和聊天页 onSend 流程一致
+      await IMService.send(String(this.dataId), messageText, domain, this.categoryId === '52')
+      await saveRecordByClient({ RecvDataID: this.dataId, SessionCategoryID: this.categoryId, MsgText: messageText, Domain: domain })
+      // 同步会话列表的最后一条消息
+      RecentService.new_message(this.categoryId + ':' + this.dataId, {
+        MsgText: messageText, // 消息文本
+        MsgTime: dateFormat(new Date()), // 发送时间
+        SendUserID: String((getUser() || {}).UserID || ''), // 发送者ID
+        Domain: domain, // 消息唯一标识
+        IsMe: true // 自己发的消息不累加未读
+      })
     },
 
     // ----------- 格式化产品图片（调用公共方法）
@@ -314,13 +331,14 @@ export default {
 </script>
 
 <style scoped lang="scss">
-$primary: #4a6fa5;
-$ink: #2c3e50;
-$muted: #7a8a9a;
-$light: #a8b5c3;
-$bg: #f4f6f9;
+$primary: #3d7eff;
+$primary-deep: #2f63e8;
+$ink: #1f2937;
+$muted: #6b7280;
+$light: #9ca3af;
+$bg: #f4f6fa;
 $card-bg: #ffffff;
-$sidebar-bg: #f0f3f7;
+$sidebar-bg: #eceff5;
 
 .product-page {
   height: 100vh;
@@ -335,7 +353,7 @@ $sidebar-bg: #f0f3f7;
   flex-shrink: 0;
   padding: 20rpx 32rpx 24rpx;
   background: $card-bg;
-  box-shadow: 0 2rpx 12rpx rgba(44, 62, 80, 0.04);
+  box-shadow: 0 2rpx 12rpx rgba(31, 41, 55, 0.04);
 }
 
 /* Tab 分段控制器 */
@@ -428,9 +446,9 @@ $sidebar-bg: #f0f3f7;
 
 .search-btn {
   flex-shrink: 0;
-  height: 68rpx;
-  line-height: 68rpx;
-  padding: 0 36rpx;
+  height: 62rpx;
+  line-height: 62rpx;
+  padding: 0 30rpx;
   background: $primary;
   border-radius: 16rpx;
   font-size: 26rpx;
@@ -462,42 +480,35 @@ $sidebar-bg: #f0f3f7;
 
 /* 左侧分类侧栏 */
 .dir-sidebar {
-  width: 200rpx;
+  width: 196rpx;
   flex-shrink: 0;
   height: 100%;
   background: $sidebar-bg;
+  padding: 12rpx 0;
+  box-sizing: border-box;
 }
 
 .dir-item {
   position: relative;
-  padding: 28rpx 20rpx 28rpx 28rpx;
+  margin: 4rpx 14rpx;
+  padding: 24rpx 18rpx;
   display: flex;
   align-items: center;
-  transition: all 0.2s ease;
-
-  .dir-indicator {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 6rpx;
-    height: 0;
-    border-radius: 0 3rpx 3rpx 0;
-    background: $primary;
-    transition: height 0.25s ease;
-  }
+  justify-content: center;
+  border-radius: 16rpx;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   .dir-name {
     font-size: 25rpx;
     color: $muted;
     line-height: 36rpx;
+    text-align: center;
     transition: all 0.2s ease;
   }
 
   &.active {
-    .dir-indicator {
-      height: 32rpx;
-    }
+    background: $card-bg;
+    box-shadow: 0 4rpx 14rpx rgba(31, 41, 55, 0.08);
 
     .dir-name {
       color: $primary;
@@ -506,7 +517,7 @@ $sidebar-bg: #f0f3f7;
   }
 
   &:active {
-    opacity: 0.7;
+    opacity: 0.75;
   }
 }
 
@@ -521,89 +532,96 @@ $sidebar-bg: #f0f3f7;
 .prod-grid {
   display: flex;
   flex-wrap: wrap;
-  padding: 16rpx 16rpx 8rpx;
+  padding: 20rpx 16rpx 12rpx;
   box-sizing: border-box;
 }
 
 /* 产品卡片 */
 .prod-card {
-  width: calc(50% - 12rpx);
-  margin: 6rpx;
-  border-radius: 16rpx;
+  width: calc(50% - 20rpx);
+  margin: 0 10rpx 20rpx;
+  box-sizing: border-box;
+  border-radius: 20rpx;
   overflow: hidden;
   background: $card-bg;
-  box-shadow: 0 2rpx 10rpx rgba(44, 62, 80, 0.05);
-  transition: all 0.2s ease;
+  box-shadow: 0 6rpx 20rpx rgba(31, 41, 55, 0.06);
+  border: 2rpx solid transparent;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:active {
-    transform: scale(0.98);
+    transform: scale(0.97);
   }
 
   &.selected {
-    box-shadow: 0 0 0 2rpx rgba(74, 111, 165, 0.35), 0 4rpx 16rpx rgba(74, 111, 165, 0.1);
+    border-color: $primary;
+    box-shadow: 0 8rpx 24rpx rgba($primary, 0.18);
   }
 }
 
 .card-img-area {
   position: relative;
   width: 100%;
-  height: 200rpx;
+  height: 220rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f7f9fc;
+  background: linear-gradient(160deg, #f8fafd 0%, #eef2f9 100%);
 }
 
 .card-img {
   width: 100%;
   height: 100%;
+  padding: 16rpx;
+  box-sizing: border-box;
 }
 
 .img-placeholder {
   text {
-    font-size: 48rpx;
+    font-size: 52rpx;
     opacity: 0.15;
   }
 }
 
 .select-circle {
   position: absolute;
-  top: 12rpx;
-  right: 12rpx;
-  width: 36rpx;
-  height: 36rpx;
+  top: 14rpx;
+  right: 14rpx;
+  width: 40rpx;
+  height: 40rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  border: 2rpx solid rgba(255, 255, 255, 0.9);
-  background: rgba(255, 255, 255, 0.85);
-  transition: all 0.2s ease;
+  border: 2rpx solid rgba(31, 41, 55, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2rpx 8rpx rgba(31, 41, 55, 0.08);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.checked {
-    background: $primary;
-    border-color: $primary;
+    background: linear-gradient(135deg, #5b8cff 0%, $primary-deep 100%);
+    border-color: transparent;
+    transform: scale(1.1);
   }
 
   .check-mark {
-    font-size: 20rpx;
+    font-size: 22rpx;
     color: #fff;
     font-weight: 600;
   }
 }
 
 .card-info {
-  padding: 16rpx 18rpx 20rpx;
+  padding: 18rpx 20rpx 22rpx;
   display: flex;
   flex-direction: column;
-  gap: 4rpx;
+  gap: 6rpx;
 }
 
 .card-name {
-  font-size: 25rpx;
+  font-size: 26rpx;
   font-weight: 600;
   color: $ink;
-  line-height: 34rpx;
+  line-height: 36rpx;
   display: -webkit-box;
   overflow: hidden;
   line-clamp: 2;
@@ -612,37 +630,36 @@ $sidebar-bg: #f0f3f7;
 }
 
 .card-company {
-  font-size: 21rpx;
+  font-size: 22rpx;
   color: $light;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-top: 2rpx;
 }
 
 /* 加载更多 */
 .load-more {
   width: 100%;
-  height: 72rpx;
+  height: 80rpx;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .load-text {
-  font-size: 22rpx;
+  font-size: 23rpx;
   color: $light;
 }
 
 .loading-dots {
   display: flex;
-  gap: 8rpx;
+  gap: 10rpx;
 
   text {
-    width: 8rpx;
-    height: 8rpx;
+    width: 10rpx;
+    height: 10rpx;
     border-radius: 50%;
-    background: $primary;
+    background: linear-gradient(135deg, #5b8cff 0%, $primary-deep 100%);
     animation: dotBounce 0.8s ease-in-out infinite alternate;
   }
 
@@ -653,23 +670,23 @@ $sidebar-bg: #f0f3f7;
 /* 状态占位 */
 .state-box {
   height: 100%;
-  min-height: 400rpx;
+  min-height: 420rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20rpx;
+  gap: 24rpx;
 
   .state-text {
-    font-size: 24rpx;
+    font-size: 25rpx;
     color: $light;
   }
 }
 
 .state-spinner {
-  width: 48rpx;
-  height: 48rpx;
-  border: 3rpx solid rgba(74, 111, 165, 0.12);
+  width: 52rpx;
+  height: 52rpx;
+  border: 4rpx solid rgba($primary, 0.12);
   border-top-color: $primary;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -677,24 +694,24 @@ $sidebar-bg: #f0f3f7;
 
 .empty-illustration {
   position: relative;
-  width: 100rpx;
-  height: 80rpx;
+  width: 110rpx;
+  height: 88rpx;
 
   .empty-box {
     position: absolute;
     bottom: 0;
     left: 50%;
     transform: translateX(-50%);
-    width: 64rpx;
-    height: 48rpx;
-    border-radius: 8rpx;
-    border: 3rpx solid rgba(74, 111, 165, 0.15);
+    width: 70rpx;
+    height: 52rpx;
+    border-radius: 10rpx;
+    border: 4rpx solid rgba($primary, 0.18);
   }
 
   .empty-box-small {
-    width: 40rpx;
-    height: 30rpx;
-    bottom: 40rpx;
+    width: 44rpx;
+    height: 32rpx;
+    bottom: 44rpx;
     left: 38%;
     opacity: 0.5;
   }
@@ -703,66 +720,91 @@ $sidebar-bg: #f0f3f7;
 /* ====== 底部发送栏 ====== */
 .bottom-bar {
   flex-shrink: 0;
-  height: calc(100rpx + env(safe-area-inset-bottom));
-  padding: 0 32rpx env(safe-area-inset-bottom);
+  padding: 18rpx 28rpx calc(18rpx + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 24rpx;
   background: $card-bg;
-  box-shadow: 0 -2rpx 16rpx rgba(44, 62, 80, 0.06);
+  box-shadow: 0 -4rpx 24rpx rgba(31, 41, 55, 0.07);
 }
 
 .selected-area {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 18rpx;
+  min-width: 0;
 
   .selected-label {
     font-size: 26rpx;
     color: $muted;
+    white-space: nowrap;
+  }
+
+  .selected-num {
+    color: $light;
+    font-weight: 600;
+
+    &.active {
+      color: $primary;
+    }
   }
 }
 
-.selected-count {
-  min-width: 40rpx;
-  height: 40rpx;
-  padding: 0 10rpx;
+/* 已选产品缩略图堆叠 */
+.selected-thumbs {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 20rpx;
-  font-size: 24rpx;
-  font-weight: 600;
-  color: $light;
-  background: $bg;
-  transition: all 0.2s ease;
+  padding-left: 8rpx;
 
-  &.active {
-    color: #fff;
-    background: $primary;
+  .thumb-img {
+    width: 56rpx;
+    height: 56rpx;
+    border-radius: 12rpx;
+    border: 3rpx solid $card-bg;
+    background: #f0f3f8;
+    margin-left: -14rpx;
+    box-shadow: 0 2rpx 8rpx rgba(31, 41, 55, 0.12);
+  }
+
+  .thumb-empty {
+    width: 56rpx;
+    height: 56rpx;
+    margin-left: -8rpx;
+    border-radius: 12rpx;
+    background: #f0f3f8;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    text {
+      font-size: 28rpx;
+      opacity: 0.3;
+    }
   }
 }
 
 .send-btn {
   width: 220rpx;
-  height: 72rpx;
+  height: 80rpx;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
+  border-radius: 999rpx;
   font-size: 28rpx;
-  font-weight: 500;
+  font-weight: 600;
   color: #fff;
-  background: #c8d0da;
-  transition: all 0.25s ease;
+  background: #c9d2dd;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 
   &.active {
-    background: $primary;
+    background: linear-gradient(135deg, #5b8cff 0%, $primary-deep 100%);
+    box-shadow: 0 8rpx 20rpx rgba($primary, 0.35);
   }
 
   &:active {
-    transform: scale(0.97);
+    transform: scale(0.96);
   }
 }
 

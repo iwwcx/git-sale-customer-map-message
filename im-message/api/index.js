@@ -164,6 +164,17 @@ export function saveDocumentLife(data) {
   });
 }
 
+// 接口4.1：获取文档文件信息，GET /data/110/fileinfo?dataId=xxx
+// 对应 IM 项目：DataService.get(`${ApiService.Common}/data/${Category.Document}/fileinfo?dataId=${docId}`)
+export function getDocFileInfo(dataId) {
+  return request({
+    url: '/data/110/fileinfo',
+    method: 'get',
+    params: { dataId },
+    apiKey: 'api60'
+  });
+}
+
 // 接口5：黑名单检查，GET /im/getIsUserBlock?blockUserId={blockUserId}
 // 对应 IM 项目：DataService.get(`${ApiService.EngineerApi}/im/getIsUserBlock?blockUserId=${blockUserId}`)
 export function getIsUserBlock(params) {

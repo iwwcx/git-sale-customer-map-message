@@ -1,5 +1,5 @@
 ﻿<template>
-  <view class="chat-page">
+  <view class="chat-page" :class="{ 'chat-page-ready': pageReady }">
     <!-- 消息列表区域 -->
     <scroll-view
       class="chat-content"
@@ -10,9 +10,9 @@
       @tap="onContentTap"
     >
       <!-- 加载更多提示 -->
-      <view v-if="hasMore" class="load-more-tip">
+      <!-- <view v-if="hasMore" class="load-more-tip">
         <text class="load-more-text">加载更多...</text>
-      </view>
+      </view> -->
 
       <!-- 消息列表 -->
       <template v-for="(msg, index) in messageList">
@@ -28,16 +28,24 @@
 
         <!-- 对方消息 -->
         <view :key="'msg-left-' + index" class="msg-row msg-row-left" v-else-if="msg.SendUserID !== myUserId">
-          <image class="msg-avatar" :src="(groupMembers[msg.SendUserID] && groupMembers[msg.SendUserID].UserLogo) || interlocutorLogo || defaultAvatar" mode="aspectFill" @tap="onAvatarTap" />
+          <image class="msg-avatar" :src="(groupMembers[msg.SendUserID] && groupMembers[msg.SendUserID].UserLogo) || interlocutorLogo || defaultAvatar" mode="aspectFill" @tap="onAvatarTap" @longpress.stop="onAvatarLongPress(msg)" />
           <view class="msg-content-col">
             <text v-if="categoryId === '52' && groupMembers[msg.SendUserID]" class="msg-sender-name">{{ groupMembers[msg.SendUserID].UserName }}</text>
-            <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
+            <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21, 'msg-bubble-file': msg.MsgType === 7 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
               <!-- ------------------ 图片 ---------------- -->
               <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
               <!-- ------------------ 语音 ---------------- -->
               <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
                 <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
                 <text class="audio-duration">{{ msg.AudioDuration }}″</text>
+              </view>
+              <!-- ------------------ 文件 ---------------- -->
+              <view v-else-if="msg.MsgType === 7" class="msg-file-card" @tap.stop="onFileTap(msg)">
+                <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName) }}</text></view>
+                <view class="file-card-info">
+                  <text class="file-card-name">{{ msg.FileName }}</text>
+                  <text class="file-card-size">{{ formatFileSize(msg.FileSize) }}</text>
+                </view>
               </view>
               <!-- ------------------ 链接卡片 ---------------- -->
               <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
@@ -52,13 +60,13 @@
                 </view>
               </view>
               <!-- ------------------ 引用回复正文 ---------------- -->
-              <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
+              <text v-else-if="msg.MsgType === 22" class="msg-text"><text v-for="(seg, i) in msg.TextSegments" :key="i" :class="{ 'msg-at-text': seg.isAt }">{{ seg.text }}</text></text>
               <!-- ------------------ 文本 ---------------- -->
-              <text v-else class="msg-text">{{ msg.DisplayText }}</text>
+              <text v-else class="msg-text"><text v-for="(seg, i) in msg.TextSegments" :key="i" :class="{ 'msg-at-text': seg.isAt }">{{ seg.text }}</text></text>
             </view>
             <!-- ------------------ 引用参考（气泡外部） ---------------- -->
             <view v-if="msg.MsgType === 22" class="msg-quote-ref-box">
-              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}: </text>
+              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}：</text>
               <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
             </view>
           </view>
@@ -69,14 +77,22 @@
           <view class="msg-content-col">
             <view class="msg-bubble-wrap-right">
               <!-- 已读/未读标记（仅单聊，群聊和通知不显示） -->
-              <text v-if="showReadStatus(msg)" class="msg-read-status" :class="{ 'msg-read-unread': msg.IsRead === 0 }">{{ msg.IsRead === 1 ? '已读' : '未读' }}</text>
-              <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
+              <text v-if="showReadStatus(msg)" class="msg-read-status" :class="{ 'msg-read-unread': msg.IsRead !== 1 }">{{ msg.IsRead === 1 ? '已读' : '未读' }}</text>
+              <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-right" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21, 'msg-bubble-file': msg.MsgType === 7 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
                 <!-- ------------------ 图片 ---------------- -->
                 <image v-if="msg.MsgType === 2" class="msg-image" :class="{ 'msg-image-landscape': msg.ImageWidth > msg.ImageHeight }" :src="msg.LocalImage || msg.ImageUrl" mode="widthFix" @load="onImageLoad($event, msg)" @tap="previewImage(msg)" />
                 <!-- ------------------ 语音 ---------------- -->
                 <view v-else-if="msg.MsgType === 8" class="msg-audio" :class="{ playing: playingAudioId === msg.MsgID }" @tap.stop="toggleAudio(msg)">
                   <view class="audio-wave"><text></text><text></text><text></text><text></text><text></text></view>
                   <text class="audio-duration">{{ msg.AudioDuration }}″</text>
+                </view>
+                <!-- ------------------ 文件 ---------------- -->
+                <view v-else-if="msg.MsgType === 7" class="msg-file-card" @tap.stop="onFileTap(msg)">
+                  <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName) }}</text></view>
+                  <view class="file-card-info">
+                    <text class="file-card-name">{{ msg.FileName }}</text>
+                    <text class="file-card-size">{{ formatFileSize(msg.FileSize) }}</text>
+                  </view>
                 </view>
                 <!-- ------------------ 链接卡片 ---------------- -->
                 <view v-else-if="msg.MsgType === 21" class="msg-link-card" @tap.stop="onLinkTap(msg)">
@@ -91,14 +107,14 @@
                   </view>
                 </view>
                 <!-- ------------------ 引用回复正文 ---------------- -->
-                <text v-else-if="msg.MsgType === 22" class="msg-text">{{ msg.ReplyText }}</text>
+                <text v-else-if="msg.MsgType === 22" class="msg-text"><text v-for="(seg, i) in msg.TextSegments" :key="i" :class="{ 'msg-at-text': seg.isAt }">{{ seg.text }}</text></text>
                 <!-- ------------------ 文本 ---------------- -->
-                <text v-else class="msg-text">{{ msg.DisplayText }}</text>
+                <text v-else class="msg-text"><text v-for="(seg, i) in msg.TextSegments" :key="i" :class="{ 'msg-at-text': seg.isAt }">{{ seg.text }}</text></text>
               </view>
             </view>
             <!-- ------------------ 引用参考（气泡外部） ---------------- -->
             <view v-if="msg.MsgType === 22" class="msg-quote-ref-box">
-              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}: </text>
+              <text class="msg-quote-ref-author">{{ msg.QuoteAuthor }}：</text>
               <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
             </view>
           </view>
@@ -111,24 +127,20 @@
     </scroll-view>
 
     <!-- 底部输入框-->
-    <view class="chat-footer footer-safe-bottom" :style="{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 'px' : '' }">
+    <view class="chat-footer" :style="{ paddingBottom: keyboardHeight > 0 ? keyboardHeight + 'px' : '' }">
       <!-- 引用预览条 -->
       <view v-if="quoteMessage" class="quote-preview-bar">
         <view class="quote-preview-content">
           <text class="quote-preview-author">{{ quoteAuthor }}</text>
-          <text class="quote-preview-text">: {{ quoteText }}</text>
+          <text class="quote-preview-text">：{{ quoteText }}</text>
         </view>
         <view class="quote-preview-close" @tap="clearQuote"><text>✕</text></view>
       </view>
       <view class="footer-input-row">
         <!-- 语音和键盘切换按钮 -->
         <view class="footer-tool-btn" @tap="toggleVoiceMode">
-          <view v-if="!isVoiceMode" class="icon-voice-switch">
-            <view class="voice-switch-wave"><text></text><text></text><text></text></view>
-          </view>
-          <view v-else class="icon-keyboard">
-            <text></text><text></text><text></text><text></text><text></text><text></text>
-          </view>
+          <image v-if="!isVoiceMode" class="footer-tool-icon" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/voice-message.png" mode="aspectFit" />
+          <image v-else class="footer-tool-icon" src="https://prodimg.global-dsc.cn/e3/a54800/9d984f/e86d96/f15815/001637" mode="aspectFit" />
         </view>
 
         <!-- 文本输入框 -->
@@ -157,16 +169,12 @@
           @touchend.stop.prevent="onVoiceTouchEnd"
           @touchcancel.stop.prevent="onVoiceTouchCancel"
         >
-          <text>{{ isVoicePressing ? (recordCancelHint ? '松开手指，取消发送' : '松开 发送') : '按住 说话' }}</text>
+          <text>{{ isVoicePressing ? (recordCancelHint ? '松开手指，取消发送' : '松开发送') : '按住说话' }}</text>
         </view>
 
         <!-- 表情按钮 -->
         <view class="footer-tool-btn" @tap="toggleEmotion">
-          <view class="icon-smile-modern">
-            <view class="smile-eye left"></view>
-            <view class="smile-eye right"></view>
-            <view class="smile-mouth"></view>
-          </view>
+          <image class="footer-tool-icon" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/emotion.png" mode="aspectFit" />
         </view>
 
         <!-- 发送按钮或更多按钮 -->
@@ -174,7 +182,7 @@
           <text class="footer-send-text">发送</text>
         </view>
         <view v-else class="footer-tool-btn" @tap="toggleMore">
-          <view class="icon-plus-modern"><text></text><text></text></view>
+          <image class="footer-tool-icon" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/add-one.png" mode="aspectFit" />
         </view>
       </view>
 
@@ -183,46 +191,45 @@
         <view class="panel-grid">
           <view class="panel-item" @tap="onPickImage('album')">
             <view class="panel-icon-wrap">
-              <view class="icon-album">
-                <view class="icon-album-rect"></view>
-                <view class="icon-album-circle"></view>
-              </view>
+              <image class="panel-icon-img" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/chat-picture.png" mode="aspectFit" />
             </view>
             <text class="panel-label">相册</text>
           </view>
           <view class="panel-item" @tap="onPickImage('camera')">
             <view class="panel-icon-wrap">
-              <view class="icon-camera">
-                <view class="icon-camera-body"></view>
-                <view class="icon-camera-lens"></view>
-              </view>
+              <image class="panel-icon-img" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/chat-camera.png" mode="aspectFit" />
             </view>
             <text class="panel-label">拍照</text>
           </view>
-          <!-- <view class="panel-item" @tap="onPickFile">
+          <view class="panel-item" @tap="onPickFile">
             <view class="panel-icon-wrap">
-              <view class="icon-file">
-                <view class="icon-file-body"></view>
-                <view class="icon-file-corner"></view>
-                <view class="icon-file-line top"></view>
-                <view class="icon-file-line mid"></view>
-                <view class="icon-file-line bot"></view>
-              </view>
+              <image class="panel-icon-img" src="https://prodimg.global-dsc.cn/a6/bee035/a2417f/b9ce14/380aa1/07d1cb" mode="aspectFit" />
             </view>
             <text class="panel-label">文件</text>
-          </view> -->
+          </view>
           <view class="panel-item" @tap="onSendProduct">
             <view class="panel-icon-wrap">
-              <view class="icon-product">
-                <view class="icon-product-tag"></view>
-                <view class="icon-product-line top"></view>
-                <view class="icon-product-line mid"></view>
-                <view class="icon-product-line bot"></view>
-              </view>
+              <image class="panel-icon-img" src="https://img2cdn.global-dsc.cn/dgzz_img/icon/chat-product.png" mode="aspectFit" />
             </view>
             <text class="panel-label">发产品</text>
           </view>
         </view>
+      </view>
+
+      <!-- @群成员面板 -->
+      <view class="footer-panel at-panel" :class="{ 'panel-open': showAtPanel }">
+        <scroll-view class="at-scroll" scroll-y>
+          <!-- @全体成员，有关键字过滤时不匹配就隐藏 -->
+          <view v-if="!atKeyword || '全体成员'.indexOf(atKeyword) > -1" class="at-item" @tap="onAtMemberTap({ UserName: '全体成员' })">
+            <view class="at-avatar at-all-avatar"><text>全</text></view>
+            <text class="at-name">全体成员</text>
+          </view>
+          <view class="at-item" v-for="member in atMemberList" :key="member.UserID" @tap="onAtMemberTap(member)">
+            <image class="at-avatar" :src="member.UserLogo || defaultAvatar" mode="aspectFill" />
+            <text class="at-name">{{ member.UserName }}</text>
+          </view>
+          <view v-if="!atMemberList.length" class="at-empty">没有匹配的群成员</view>
+        </scroll-view>
       </view>
 
       <!-- 表情面板 -->
@@ -257,19 +264,21 @@
         <view class="msg-action-arrow"></view>
         <view class="msg-action-list">
           <view class="msg-action-item" @tap.stop="onActionCopy">
-            <text class="msg-action-icon">⎘</text>
+            <text class="msg-action-icon">📋</text>
             <text class="msg-action-label">复制</text>
           </view>
           <view class="msg-action-divider"></view>
           <view class="msg-action-item" @tap.stop="onActionQuote">
-            <text class="msg-action-icon">❝</text>
+            <text class="msg-action-icon">💬</text>
             <text class="msg-action-label">引用</text>
           </view>
-          <view class="msg-action-divider"></view>
-          <view class="msg-action-item" @tap.stop="onActionRevoke">
-            <text class="msg-action-icon">↩</text>
-            <text class="msg-action-label">撤回</text>
-          </view>
+          <template v-if="canRevoke(actionMenuTarget)">
+            <view class="msg-action-divider"></view>
+            <view class="msg-action-item" @tap.stop="onActionRevoke">
+              <text class="msg-action-icon">↩️</text>
+              <text class="msg-action-label">撤回</text>
+            </view>
+          </template>
         </view>
       </view>
     </view>
@@ -277,7 +286,7 @@
 </template>
 
 <script>
-import { getRecordList, saveRecordByClient, getGroupUserList } from '../../api/index.js'
+import { getRecordList, saveRecordByClient, getGroupUserList, saveDocumentLife, getDocFileInfo } from '../../api/index.js'
 import request from '../../api/request.js'
 import { IMService } from '../../services/im.js'
 import { MessageService } from '../../services/message.js'
@@ -302,8 +311,11 @@ export default {
       keyboardHeight: 0,  // 键盘高度（px），用于手动顶起 footer
       showMore: false,  // 显示更多面板
       showEmotion: false,  // 显示表情面板
+      showAtPanel: false,  // 显示 @群成员面板
+      atKeyword: '',  // @ 后面输入的搜索关键字
       hasMore: false,  // 是否有更多历史消息
       loading: false,  // 加载中状态
+      pageReady: false,  // 页面是否就绪（首次加载完成后淡入）
       scrollToId: 'msg-bottom',  // 滚动目标
       scrollWithAnimation: false,  // 是否使用滚动动画，首次加载关闭
       isVoiceMode: false,  // 是否切换到按住说话模式
@@ -338,11 +350,8 @@ export default {
     const { key, name, logo } = options
     this.interlocutorKey = decodeURIComponent(key || '')  // 会话标识，格式 "CategoryId:DataId"
     this.interlocutorName = decodeURIComponent(name || '')  // 对方昵称，用于导航栏标题
-    this.interlocutorLogo = decodeURIComponent(logo || '')  // 对方头像URL
-    // 列表页传来的头像是相对路径 key，需要拼 CDN 域名；完整 URL 直接使用
-    if (this.interlocutorLogo && !/^https?:\/\//.test(this.interlocutorLogo)) {
-      this.interlocutorLogo = getProductImageUrlChat(this.interlocutorLogo)
-    }
+    const rawLogo = decodeURIComponent(logo || '')  // 对方头像原始路径（列表页传的是未格式化的 SessionLogo）
+    this.interlocutorLogo = rawLogo ? getProductImageUrlChat(rawLogo) : ''  // 对方头像URL，需格式化成完整地址才能加载
     // 设置导航栏标题为对方名称，没有则默认显示"聊天"
     uni.setNavigationBarTitle({ title: this.interlocutorName || '聊天' })
 
@@ -389,6 +398,12 @@ export default {
     }
     uni.onKeyboardHeightChange(this._keyboardHandler)
   },
+  onShow() {
+    // 从发产品等子页面返回时，增量拉取最新消息（首次进入时 onLoad 的加载还没完成，跳过）
+    if (this._loaded) {
+      this.loadNewMessages()
+    }
+  },
   onUnload() {
     // 取消实时消息订阅并清除当前会话标记
     MessageService.unsubscribe(this.interlocutorKey, this._messageHandler)
@@ -407,14 +422,70 @@ export default {
     // 销毁语音播放器，释放系统音频资源
     if (this._audioContext) this._audioContext.destroy()
   },
+  watch: {
+    // ----------- 监听输入内容，群聊里输入 @ 弹出群成员选择面板
+    inputText(text) {
+      if (this.categoryId !== '52') { this.showAtPanel = false; return }  // 仅群聊支持
+      const atIndex = text.lastIndexOf('@')  // 最后一个 @ 的位置
+      if (atIndex === -1) { this.showAtPanel = false; return }
+      const tail = text.slice(atIndex + 1)  // @ 后面输入的内容
+      if (/\s/.test(tail)) { this.showAtPanel = false; return }  // @名字 已完成（后面有空格），收起面板
+      this.atKeyword = tail
+      this.showAtPanel = true
+    }
+  },
+  computed: {
+    // ----------- 可 @ 的群成员列表（排除自己，按关键字过滤）
+    atMemberList() {
+      const list = []  // 过滤后的群成员列表
+      Object.keys(this.groupMembers).forEach((id) => {
+        if (String(id) === String(this.myUserId)) return  // 不 @ 自己
+        const member = this.groupMembers[id]  // 群成员信息
+        if (!this.atKeyword || (member.UserName || '').indexOf(this.atKeyword) > -1) {
+          list.push({ UserID: id, UserName: member.UserName, UserLogo: member.UserLogo })
+        }
+      })
+      return list
+    }
+  },
   methods: {
     getProductImageUrlChat,
 
+    // ----------- 点击 @面板 里的群成员，把 @名字 填入输入框
+    onAtMemberTap(member) {
+      const atIndex = this.inputText.lastIndexOf('@')  // 最后一个 @ 的位置
+      this.inputText = this.inputText.slice(0, atIndex) + '@' + member.UserName.trim() + ' '  // 替换掉 @和关键字
+      this.showAtPanel = false
+      this.atKeyword = ''
+      this.isFocus = false  // 先重置焦点状态，确保再次聚焦能触发
+      this.$nextTick(() => {
+        this.isFocus = true
+      })
+    },
+
     // ----------- 点击头像（群聊时跳转群信息页）
     onAvatarTap() {
+      if (this._avatarLongPressed) {  // 长按触发的 tap 不跳转
+        this._avatarLongPressed = false
+        return
+      }
       if (this.categoryId === '52') {
         this.goGroupInfo()
       }
+    },
+
+    // ----------- 长按群成员头像，把 @Ta 插入输入框（仅群聊）
+    onAvatarLongPress(msg) {
+      if (this.categoryId !== '52') return  // 仅群聊支持 @
+      const member = this.groupMembers[msg.SendUserID]  // 被长按的群成员
+      if (!member || !member.UserName) return
+      this._avatarLongPressed = true  // 标记本次是长按，阻止 tap 跳群信息页
+      this.inputText += '@' + member.UserName.trim() + ' '  // 输入框追加 @名字 和空格，名字去空格
+      this.isVoiceMode = false
+      this.isFocus = false  // 先重置焦点状态，确保已经是聚焦态时也能再次触发聚焦
+      this.$nextTick(() => {
+        this.isFocus = true
+      })
     },
 
     // ----------- 跳转群信息页
@@ -432,6 +503,7 @@ export default {
         this.showMore = false
         this.showEmotion = false
       }
+      this.showAtPanel = false
       if (this.isFocus) {
         this.isFocus = false
         this.keyboardHeight = 0
@@ -466,7 +538,7 @@ export default {
           categoryId: this.categoryId,
           dataId: this.dataId,
           msgId: 0,
-          pageSize: 15
+          pageSize: 35
         })
         // 兼容两种返回格式
         const list = res.List || (res.Data && res.Data.List) || []
@@ -480,19 +552,57 @@ export default {
 
         this.messageList = list
         this.hasMore = hasMore
+        this._loaded = true  // 首次加载完成标记，onShow 用它判断是否需要增量加载
 
-        // 滚动到底部（首次加载不用动画）
+        // 滚动到底部（首次加载不用动画），滚动完成后再显示页面避免闪烁
         this.$nextTick(() => {
           this.scrollToId = ''
           this.$nextTick(() => {
             this.scrollToId = 'msg-bottom'
             this.scrollWithAnimation = true  // 后续滚动启用动画
+            this.$nextTick(() => {
+              this.pageReady = true  // 页面就绪，淡入显示
+            })
           })
         })
       } catch (e) {
         console.error('加载聊天记录失败:', e)
       } finally {
         this.loading = false
+      }
+    },
+
+    // ----------- 增量加载最新消息（从子页面返回时调用）
+    async loadNewMessages() {
+      if (!this.categoryId || !this.dataId || this.loading || !this.messageList.length) return
+      try {
+        const res = await getRecordList({
+          categoryId: this.categoryId,
+          dataId: this.dataId,
+          msgId: 0,
+          pageSize: 35
+        })
+        const list = res.List || (res.Data && res.Data.List) || []  // 最新一页消息（倒序）
+        if (!list.length) return
+        list.reverse()
+        this.processMessages(list)
+        // 本地已有消息的 domain 和 MsgID 集合，用于去重（本地刚发的消息和服务端记录 domain 相同）
+        const existIds = {}  // 已有消息标识集合
+        this.messageList.forEach((m) => {
+          if (m.Domain) existIds[String(m.Domain)] = true
+          if (m.MsgID) existIds[String(m.MsgID)] = true
+        })
+        const newMessages = list.filter((m) => !existIds[String(m.Domain)] && !existIds[String(m.MsgID)])  // 过滤出的新消息
+        if (!newMessages.length) return
+        // 第一条新消息的时间分割线要和现有最后一条比较
+        const lastMessage = this.messageList[this.messageList.length - 1]  // 追加前最后一条消息
+        if (lastMessage && newMessages[0].MsgTime) {
+          newMessages[0].ShowTime = this.timeDiffMinutes(newMessages[0].MsgTime, lastMessage.MsgTime) >= 1
+        }
+        this.messageList = this.messageList.concat(newMessages)
+        this.scrollToBottom()
+      } catch (e) {
+        console.error('增量加载消息失败:', e)
       }
     },
 
@@ -509,7 +619,7 @@ export default {
           categoryId: this.categoryId,
           dataId: this.dataId,
           msgId: msgId,
-          pageSize: 15
+          pageSize: 35
         })
         const list = res.List || (res.Data && res.Data.List) || []
         const hasMore = res.HasMore !== undefined ? res.HasMore : (res.Data && res.Data.HasMore) || false
@@ -521,6 +631,21 @@ export default {
         // 插入到列表头部
         this.messageList.unshift(...list)
         this.hasMore = hasMore
+
+        // 找到加载前第一条消息在插入后的新位置（撤回消息没有气泡锚点，往后找第一条有气泡的）
+        let anchorIndex = list.length  // 加载前第一条消息的新下标
+        while (anchorIndex < this.messageList.length && this.isRevokeMsg(this.messageList[anchorIndex])) {
+          anchorIndex++
+        }
+        // 关闭动画，把视口锚定回原来的消息，避免加载后滚动位置跳变
+        this.scrollWithAnimation = false
+        this.scrollToId = ''
+        this.$nextTick(() => {
+          this.scrollToId = 'msg-bubble-' + anchorIndex
+          this.$nextTick(() => {
+            this.scrollWithAnimation = true  // 恢复滚动动画
+          })
+        })
       } catch (e) {
         console.error('加载更多失败:', e)
       } finally {
@@ -574,6 +699,15 @@ export default {
           msg.AudioPath = audioMatch[1]
           msg.AudioDuration = Math.max(1, Math.ceil(Number(audioMatch[2]) || 1))
         }
+        // 解析文件消息，格式为 <m_file,110:ID:LifeVersion:CreateUser,size,encodedName,priv>
+        const fileMatch = String(msg.MsgText || '').match(/<m_file,([^,>]+),([^,>]*),([^,>]*),([^>]*)>/i)  // 文件消息匹配结果
+        if (fileMatch) {
+          msg.MsgType = 7
+          msg.FilePath = fileMatch[1]  // 文件路径，格式 110:ID:LifeVersion:CreateUser
+          msg.FileSize = Number(fileMatch[2]) || 0  // 文件大小（字节）
+          msg.FileName = decodeURIComponent(fileMatch[3] || '')  // 文件名
+          msg.FilePriv = fileMatch[4] || '0'  // 是否私有文件
+        }
         // 解析链接消息，格式为 <m_link,url,title,logo,desc>
         const linkMatch = String(msg.MsgText || '').match(/<m_link,([^,>]*),([^,>]*),([^,>]*),([^>]*)>/i)  // 链接消息匹配结果
         if (linkMatch) {
@@ -601,6 +735,8 @@ export default {
           // 解析显示文本（将特殊消息标签转为可读文字）
           msg.DisplayText = this.parseDisplayText(msg.MsgText)
         }
+        // 把文本按 @名字 切成片段，@部分渲染成橙色
+        msg.TextSegments = this.parseAtSegments(msg.DisplayText)
         // 时间显示：首条消息或与上一条间隔超过1分钟时显示
         if (msg.MsgTime && (!lastTime || this.timeDiffMinutes(msg.MsgTime, lastTime) >= 1)) {
           msg.ShowTime = true
@@ -618,6 +754,25 @@ export default {
       if (!imageWidth || !imageHeight) return
       msg.ImageWidth = imageWidth
       msg.ImageHeight = imageHeight
+    },
+
+    // ----------- 把文本按 @名字 切成片段，@部分渲染成橙色
+    parseAtSegments(text) {
+      const segments = []  // 文本片段列表 { text, isAt }
+      const reg = /@([^\s@]+)\s*/g  // @名字 匹配规则：@开头，名字不含空格，后面跟空格
+      let lastIndex = 0  // 上次匹配结束位置
+      let match = null  // 当前匹配结果
+      while ((match = reg.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          segments.push({ text: text.slice(lastIndex, match.index), isAt: false })
+        }
+        segments.push({ text: match[0], isAt: true })
+        lastIndex = reg.lastIndex
+      }
+      if (lastIndex < text.length) {
+        segments.push({ text: text.slice(lastIndex), isAt: false })
+      }
+      return segments
     },
 
     // ----------- 解析消息文本为可读内
@@ -648,9 +803,13 @@ export default {
       return msg.IsRevoke || /^<m_revoke,[^>]*>$/i.test(String(msg.MsgText || ''))
     },
 
+    // ----------- 判断消息是否可撤回（仅自己发的消息显示撤回按钮）
+    canRevoke(msg) {
+      return !!msg && String(msg.SendUserID) === String(this.myUserId)
+    },
+
     // ----------- 长按消息气泡弹出微信式操作菜单
     onMsgLongPress(msg, index) {
-      if (String(msg.SendUserID) !== String(this.myUserId)) return  // 只能操作自己发的消息
       if (this.isRevokeMsg(msg)) return  // 已撤回的消息不再显示菜单
       this.actionMenuTarget = msg  // 记录当前要操作的消息
       const selector = '#msg-bubble-' + index  // 气泡选择器
@@ -658,8 +817,9 @@ export default {
         if (!rect) return
         const systemInfo = uni.getSystemInfoSync()
         const rpxToPx = (rpx) => rpx * systemInfo.windowWidth / 750  // rpx 转 px
-        const popupWidth = rpxToPx(360)  // 菜单宽度 360rpx
-        const popupHeight = rpxToPx(88)  // 菜单高度 88rpx
+        const itemCount = this.canRevoke(msg) ? 3 : 2  // 菜单按钮数，自己的消息多一个撤回
+        const popupWidth = rpxToPx(itemCount * 116 + 16)  // 菜单宽度，按按钮数自适应
+        const popupHeight = rpxToPx(108)  // 菜单高度 108rpx
         const arrowSize = rpxToPx(12)  // 箭头高度 12rpx
         const gap = rpxToPx(20)  // 箭头尖端与气泡的间距 20rpx
         let left = rect.left + rect.width / 2 - popupWidth / 2
@@ -700,11 +860,13 @@ export default {
       if (!target) return
       const text = target.DisplayText || target.MsgText || ''
       if (!text) return
+      const member = this.groupMembers[target.SendUserID]  // 群聊发送者信息
       this.quoteMessage = target  // 记录被引用的消息
       this.quoteText = text  // 引用预览文本
-      this.quoteAuthor = String(target.SendUserID) === String(this.myUserId) ? '我' : (this.interlocutorName || '对方')  // 引用作者名
+      this.quoteAuthor = String(target.SendUserID) === String(this.myUserId) ? '我' : ((member && member.UserName) || this.interlocutorName || '对方')  // 引用作者名，群聊取发送者昵称
       this.inputText = ''  // 清空输入框，等待用户输入回复内容
       this.isVoiceMode = false
+      this.isFocus = false  // 先重置焦点状态，确保已经是聚焦态时也能再次触发聚焦
       this.$nextTick(() => {
         this.isFocus = true
       })
@@ -727,8 +889,8 @@ export default {
     // ----------- 撤回消息
     async revokeMessage(msg) {
       const msgTime = new Date(msg.MsgTime).getTime()  // 消息发送时间戳
-      if (Date.now() - msgTime > 10 * 60 * 1000) {  // 超过10分钟禁止撤回
-        uni.showToast({ title: '只能撤回10分钟之内的消息', icon: 'none' })
+      if (Date.now() - msgTime > 30 * 60 * 1000) {  // 超过10分钟禁止撤回
+        uni.showToast({ title: '只能撤回30分钟之内的消息', icon: 'none' })
         return
       }
       if (String(msg.SendUserID) !== String(this.myUserId)) {  // 非本人发送的消息不能撤回
@@ -777,6 +939,12 @@ export default {
         message.ShowTime = !lastMessage || this.timeDiffMinutes(message.MsgTime, lastMessage.MsgTime) >= 1
         this.messageList.push(message)
         this.scrollToBottom()
+        // 单聊收到对方消息时回发已读回执，让对方的未读标记变为已读
+        if (this.categoryId === '20' && String(message.SendUserID) !== String(this.myUserId)) {
+          IMService.send(String(this.dataId), '<m_read,' + this.interlocutorKey + '>', this.generateGuid(), false).catch((e) => {
+            console.warn('发送已读回执失败:', e)
+          })
+        }
       } else if (event.type === 'revoke') {
         // 撤回：把目标消息替换为撤回提示
         const target = this.messageList.find((msg) => msg.Domain === event.domain)  // 被撤回的消息
@@ -852,7 +1020,10 @@ export default {
         msg.QuoteText = this.quoteText
         msg.ReplyText = text
       }
+      // 本地消息也要按 @名字 切片段，否则气泡渲染为空
+      msg.TextSegments = this.parseAtSegments(msg.DisplayText)
       this.messageList.push(msg)
+      RecentService.new_message(this.interlocutorKey, msg)  // 同步会话列表的最后一条消息
       this.inputText = ''
       this.clearQuote()
       this.scrollToBottom()
@@ -1047,6 +1218,7 @@ export default {
         Domain: domain,
         IsMe: true,
         State: -1,
+        IsRead: 0,  // 已读状态，对方已读回执到达后更新
         ImageWidth: 0,  // 图片原始宽度
         ImageHeight: 0  // 图片原始高度
       }  // 先插入列表展示的本地图片消息
@@ -1081,6 +1253,7 @@ export default {
         msg.MsgText = msgText
         msg.ImageUrl = imageUrl
         msg.State = 1
+        RecentService.new_message(this.interlocutorKey, msg)  // 同步会话列表的最后一条消息
       } catch (error) {
         console.error('发送图片失败:', error)
         msg.State = 0
@@ -1090,32 +1263,9 @@ export default {
       }
     },
 
-    // ----------- 根据运行端上传图片到 OBS
+    // ----------- 上传图片到 OBS（小程序通过 POST 表单上传）
     async uploadImageToObs(filePath, contentType, options, credential) {
-      // #ifdef H5
-      const response = await fetch(filePath)  // H5 本地图片响应
-      if (!response.ok) throw new Error('读取图片失败')
-      const blob = await response.blob()  // H5 图片二进制数据
-      const ObsClientClass = await this.loadObsClient()  // 华为云 OBS 浏览器客户端
-      const obsClient = new ObsClientClass({
-        access_key_id: credential.access,
-        secret_access_key: credential.secret,
-        security_token: credential.securitytoken,
-        server: 'https://' + options.domain
-      })  // 当前图片使用的 OBS 客户端
-      const uploadRes = await obsClient.putObject({
-        Bucket: options.bucket,
-        Key: options.key,
-        Body: blob,
-        ContentType: blob.type || contentType
-      })  // OBS 上传结果
-      if (uploadRes.CommonMsg && uploadRes.CommonMsg.Status >= 300) {
-        throw new Error(uploadRes.CommonMsg.Message || 'OBS上传失败')
-      }
-      // #endif
-      // #ifndef H5
       await this.uploadImageByForm(filePath, contentType, options, credential)
-      // #endif
     },
 
     // ----------- 小程序通过 POST 表单上传图片到 OBS
@@ -1278,28 +1428,6 @@ export default {
       })
     },
 
-    // ----------- 加载华为云 OBS 浏览器 SDK
-    loadObsClient() {
-      const globalObsClient = typeof globalThis !== 'undefined' ? globalThis.ObsClient : null  // 页面已经加载的 OBS 客户端
-      if (globalObsClient) return Promise.resolve(globalObsClient)
-      // #ifdef H5
-      return new Promise((resolve, reject) => {
-        const oldScript = document.getElementById('huawei-obs-sdk')  // 页面中已存在的 SDK 标签
-        if (oldScript) {
-          oldScript.addEventListener('load', () => resolve(window.ObsClient), { once: true })
-          oldScript.addEventListener('error', () => reject(new Error('OBS SDK加载失败')), { once: true })
-          return
-        }
-        const script = document.createElement('script')  // 动态加载的 OBS SDK 标签
-        script.id = 'huawei-obs-sdk'
-        script.src = 'https://unpkg.com/esdk-obs-browserjs@3.24.3/dist/esdk-obs-browserjs.3.24.3.min.js'
-        script.onload = () => window.ObsClient ? resolve(window.ObsClient) : reject(new Error('OBS SDK加载失败'))
-        script.onerror = () => reject(new Error('OBS SDK加载失败'))
-        document.head.appendChild(script)
-      })
-      // #endif
-    },
-
     // ----------- 获取图片 ContentType
     getImageContentType(filePath) {
       const ext = String(filePath).split(/[?#]/)[0].split('.').pop().toLowerCase()  // 图片文件后缀
@@ -1323,7 +1451,6 @@ export default {
 
     // ----------- 获取录音权限
     ensureRecordPermission() {
-      // #ifdef MP-WEIXIN
       // 微信小程序录音前需要先申请麦克风权限
       return new Promise((resolve, reject) => {
         uni.authorize({
@@ -1343,11 +1470,6 @@ export default {
           }
         })
       })
-      // #endif
-      // #ifndef MP-WEIXIN
-      // 其他运行端交给系统在真正录音时处理权限
-      return Promise.resolve()
-      // #endif
     },
 
     // ----------- 开始录音
@@ -1449,7 +1571,8 @@ export default {
         SendUserID: this.myUserId,
         Domain: domain,
         IsMe: true,
-        State: -1
+        State: -1,
+        IsRead: 0  // 已读状态，对方已读回执到达后更新
       }  // 先插入聊天列表的本地语音消息
       // 先展示本地语音气泡，让用户不用等待上传完成
       this.messageList.push(msg)
@@ -1485,6 +1608,7 @@ export default {
         msg.MsgText = msgText
         msg.AudioPath = audioPath
         msg.State = 1
+        RecentService.new_message(this.interlocutorKey, msg)  // 同步会话列表的最后一条消息
       } catch (error) {
         console.error('发送语音失败:', error)
         msg.State = 0
@@ -1520,17 +1644,12 @@ export default {
       }
       try {
         this.playingAudioId = msg.MsgID
-        const audioSource = msg.LocalAudio || await this.downloadAudio(msg)  // 本地可播放的语音地址
+        const audioSource = this.getAudioRemoteUrl(msg)  // 远程语音地址，InnerAudioContext 直接播放
         const audioContext = uni.createInnerAudioContext()  // 当前语音播放器
         this._audioContext = audioContext
         this._audioMessageId = msg.MsgID
-        // 关闭自动播放和循环播放，由点击事件主动控制每次只播放一遍
         audioContext.autoplay = false
         audioContext.loop = false
-        // 音频资源准备好后开始播放
-        audioContext.onCanplay(() => {
-          if (this._audioContext === audioContext && this.playingAudioId === msg.MsgID) audioContext.play()
-        })
         // 播放结束后只清理动画状态，不自动循环播放
         audioContext.onEnded(() => {
           if (this._audioContext !== audioContext) return
@@ -1559,34 +1678,12 @@ export default {
       }
     },
 
-    // ----------- 下载线上语音到本地
-    downloadAudio(msg) {
+    // ----------- 获取语音远程地址
+    getAudioRemoteUrl(msg) {
       const audioPath = String(msg.AudioPath || '')  // 消息中保存的语音路径
-      const remoteUrl = audioPath.indexOf('http') === 0
+      return audioPath.indexOf('http') === 0
         ? audioPath
         : 'https://big-engineer.oss-cn-hangzhou.aliyuncs.com/' + audioPath.replace(/^[^/]+\//, '')  // 兼容历史 bucket/key 格式
-      // 先下载到小程序临时目录，解决远程音频重复播放不稳定的问题
-      return new Promise((resolve, reject) => {
-        uni.downloadFile({
-          url: remoteUrl,
-          success: (res) => {
-            if (Number(res.statusCode) === 200 && res.tempFilePath) {
-              // 缓存本地临时路径，后续点击同一条语音时不用再次下载
-              msg.LocalAudio = res.tempFilePath
-              resolve(res.tempFilePath)
-              return
-            }
-            reject(new Error('语音下载失败，状态码：' + res.statusCode))
-          },
-          fail: reject
-        })
-      })
-    },
-
-    // ----------- 选择文件
-    onPickFile() {
-      // TODO: 小程序环境选择文件
-      uni.showToast({ title: '文件选择功能开发中', icon: 'none' })
     },
 
     // ----------- 将旧格式产品URL统一转成 product-detail 格式（参考 big-engineer 项目）
@@ -1648,10 +1745,8 @@ export default {
       if (String(msg.SendUserID) !== String(this.myUserId)) return false
       // 撤回消息不显示
       if (msg.IsRevoke) return false
-      // 本地待发送的消息（State === -1）不显示
-      if (msg.State === -1) return false
-      // IsRead 字段必须存在才显示
-      return msg.IsRead !== undefined && msg.IsRead !== null
+      // 其余情况都显示，IsRead !== 1 时一律按未读展示
+      return true
     },
 
     // ----------- 跳转发产品页面
@@ -1663,6 +1758,232 @@ export default {
         'logo=' + encodeURIComponent(this.interlocutorLogo)
       ].join('&')
       uni.navigateTo({ url: '/im-message/pages/product/index?' + params })
+    },
+
+    // ----------- 选择文件并发送
+    onPickFile() {
+      this.showMore = false
+      uni.chooseMessageFile({
+        count: 1,
+        type: 'file',
+        success: (res) => {
+          const file = res.tempFiles[0]  // 用户选中的文件
+          if (!file) return
+          this.sendFileMessage(file.path, file.name, file.size)
+        },
+        fail: (error) => {
+          if (!String(error.errMsg || '').includes('cancel')) {
+            uni.showToast({ title: '选择文件失败', icon: 'none' })
+          }
+        }
+      })
+    },
+
+    // ----------- 上传并发送文件消息
+    async sendFileMessage(filePath, fileName, fileSize) {
+      const domain = this.generateGuid()  // 本次文件消息唯一标识
+      const msg = {
+        MsgID: domain,
+        MsgType: 7,
+        MsgText: '<m_file,local:' + filePath + '>',
+        DisplayText: '[文件]',
+        FileName: fileName,
+        FileSize: fileSize,
+        MsgTime: this.formatNow(),
+        SendUserID: this.myUserId,
+        Domain: domain,
+        IsMe: true,
+        State: -1,
+        IsRead: 0
+      }  // 先插入列表展示的本地文件消息
+      this.messageList.push(msg)
+      this.scrollToBottom()
+      try {
+        uni.showLoading({ title: '正在发送中...', mask: true })
+        const ext = this.getFileExt(fileName)  // 文件后缀
+        const contentType = this.getContentType(ext)  // 文件 ContentType
+        const fileKey = await this.getImageKey(filePath)  // OBS 文件唯一 key
+        const signatureRes = await request({
+          url: '/obs/putUrlSignature',
+          method: 'post',
+          params: { category: 50, key: fileKey, priv: false },
+          apiKey: 'profitapi'
+        })  // OBS 临时凭证响应
+        const signature = signatureRes.data || signatureRes.Data || signatureRes  // 兼容接口不同响应层级
+        const options = signature.options || signature.Options  // OBS 上传参数
+        const credential = signature.credential || signature.Credential  // OBS 临时访问凭证
+        if (!options || !credential) throw new Error('OBS上传凭证无效')
+        // 复用已有的 OBS 上传方法
+        await this.uploadImageToObs(filePath, contentType, options, credential)
+        const displayDomain = String(options.displayDomain || '').replace(/\/$/, '')  // OBS 公开访问域名
+        // 调用 saveDocumentLife 保存文件元数据到资料库，拿到 ID/LifeVersion/CreateUser
+        const FileBucket = options.bucket  // OBS 桶名
+        const FileServerPath = options.key  // OBS 文件路径
+        const saveData = {
+          Datas: [
+            {
+              DataId: 0,
+              LifeToken: null,
+              Data: {
+                DocName: fileName,
+                FileBucket,
+                FileExt: '.' + ext,
+                FileHash: fileKey,
+                FileModifyDate: this.formatNow(),
+                FileServerPath,
+                FileSize: fileSize
+              }
+            }
+          ]
+        }  // 保存到资料库的请求体
+        const saveRes = await saveDocumentLife(saveData)  // 资料库保存响应
+        const docData = (saveRes.data || saveRes.Data || saveRes)[0] || (Array.isArray(saveRes) ? saveRes[0] : saveRes)  // 兼容不同响应结构
+        if (!docData || !docData.ID) throw new Error('保存文件资料失败')
+        // 拼接文件消息格式：<m_file,110:ID:LifeVersion:CreateUser,size,encodedName,1>
+        const filePathStr = '110:' + docData.ID + ':' + docData.LifeVersion + ':' + docData.CreateUser
+        const msgText = '<m_file,' + filePathStr + ',' + fileSize + ',' + encodeURIComponent(fileName) + ',1>'
+        await this.sendToPeer(msgText, domain)  // 先通过 IM SDK 实时送达对端
+        await saveRecordByClient({
+          RecvDataID: this.dataId,
+          SessionCategoryID: this.categoryId,
+          MsgText: msgText,
+          Domain: domain
+        })
+        msg.MsgText = msgText
+        msg.FilePath = filePathStr
+        msg.FilePriv = '1'
+        msg.FileDomain = displayDomain  // 保存 OBS 公开域名，下载时直接用
+        msg.State = 1
+        RecentService.new_message(this.interlocutorKey, msg)  // 同步会话列表的最后一条消息
+      } catch (error) {
+        console.error('发送文件失败:', error)
+        msg.State = 0
+        uni.showToast({ title: error.message || '发送文件失败', icon: 'none' })
+      } finally {
+        uni.hideLoading()
+      }
+    },
+
+    // ----------- 点击文件卡片下载并打开
+    async onFileTap(msg) {
+      if (!msg.FilePath) return
+      // 本地文件（发送中）直接打开
+      const localMatch = String(msg.MsgText || '').match(/<m_file,local:([^>]+)>/i)
+      if (localMatch) {
+        uni.openDocument({
+          filePath: localMatch[1],
+          showMenu: true,
+          fail: () => uni.showToast({ title: '无法打开此文件', icon: 'none' })
+        })
+        return
+      }
+      // 路径拆分 110:ID:LifeVersion:CreateUser
+      const parts = String(msg.FilePath).split(':')
+      const dataId = parts[1] || ''  // 文档ID
+      uni.showLoading({ title: '正在加载...', mask: true })
+      try {
+        // 第一步：调 fileinfo 拿 FileServerPath，和 supply-chain-im 的 _download / preView 流程一致
+        const fileInfoRes = await getDocFileInfo(dataId)  // fileinfo 响应
+        const fileInfo = fileInfoRes.data || fileInfoRes.Data || fileInfoRes  // 兼容不同响应层级
+        const fileServerPath = fileInfo.FileServerPath || fileInfo.fileServerPath || ''  // OBS 文件路径
+        if (!fileServerPath) throw new Error('文件不存在或已删除')
+        // 第二步：获取 OBS 公开访问域名
+        // 优先用发送时保存的 FileDomain，没有则从缓存取，再没有则请求一次 OBS 签名拿 displayDomain
+        let obsDomain = msg.FileDomain || uni.getStorageSync('obsDisplayDomain') || ''  // OBS 公开域名
+        if (!obsDomain) {
+          // 请求一次 OBS 签名只拿 displayDomain（和 supply-chain-im 的 JnOssLook 等效）
+          const tmpKey = this.generateGuid().replace(/-/g, '')  // 临时 key
+          const sigRes = await request({
+            url: '/obs/putUrlSignature',
+            method: 'post',
+            params: { category: 50, key: tmpKey, priv: false },
+            apiKey: 'profitapi'
+          })  // OBS 签名响应
+          const sig = sigRes.data || sigRes.Data || sigRes  // 兼容不同响应层级
+          const opts = sig.options || sig.Options  // OBS 上传参数
+          obsDomain = String(opts.displayDomain || '').replace(/\/$/, '')  // 去掉末尾斜杠
+          if (obsDomain) uni.setStorageSync('obsDisplayDomain', obsDomain)  // 缓存供下次用
+        }
+        if (!obsDomain) throw new Error('获取文件下载地址失败')
+        // 第三步：拼 OBS 直链下载（和 supply-chain-im 的 look_host + '/' + FileServerPath 一样）
+        const downloadUrl = obsDomain + '/' + fileServerPath  // OBS 直链地址
+        // 下载文件到临时目录再用 openDocument 预览
+        const downloadRes = await new Promise((resolve, reject) => {
+          uni.downloadFile({
+            url: downloadUrl,
+            success: resolve,
+            fail: reject
+          })
+        })
+        if (downloadRes.statusCode !== 200) {
+          throw new Error('下载失败，状态码：' + downloadRes.statusCode)
+        }
+        uni.openDocument({
+          filePath: downloadRes.tempFilePath,
+          showMenu: true,
+          fail: () => uni.showToast({ title: '无法打开此文件', icon: 'none' })
+        })
+      } catch (error) {
+        console.error('下载文件失败:', error)
+        uni.showToast({ title: error.message || '下载文件失败', icon: 'none' })
+      } finally {
+        uni.hideLoading()
+      }
+    },
+
+    // ----------- 获取文件后缀（小写，不含点）
+    getFileExt(fileName) {
+      if (!fileName) return ''
+      const ext = String(fileName).split('.').pop().toLowerCase()  // 文件后缀
+      return ext === fileName ? '' : ext  // 没有后缀时返回空
+    },
+
+    // ----------- 根据文件后缀获取图标样式类名
+    getFileIconClass(fileName) {
+      const ext = this.getFileExt(fileName)  // 文件后缀
+      const wordExts = ['doc', 'docx']  // Word 文件后缀列表
+      const excelExts = ['xls', 'xlsx']  // Excel 文件后缀列表
+      const pptExts = ['ppt', 'pptx']  // PPT 文件后缀列表
+      const pdfExts = ['pdf']  // PDF 文件后缀列表
+      const zipExts = ['rar', 'zip', '7z', 'gz', 'tar', 'arj', 'z']  // 压缩包后缀列表
+      const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'ico', 'tif', 'tiff']  // 图片后缀列表
+      const videoExts = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'webm', 'm4v', 'mpeg', 'mpg', '3gp', 'rmvb']  // 视频后缀列表
+      const audioExts = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma']  // 音频后缀列表
+      if (wordExts.includes(ext)) return 'file-icon-word'
+      if (excelExts.includes(ext)) return 'file-icon-excel'
+      if (pptExts.includes(ext)) return 'file-icon-ppt'
+      if (pdfExts.includes(ext)) return 'file-icon-pdf'
+      if (zipExts.includes(ext)) return 'file-icon-zip'
+      if (imageExts.includes(ext)) return 'file-icon-image'
+      if (videoExts.includes(ext)) return 'file-icon-video'
+      if (audioExts.includes(ext)) return 'file-icon-audio'
+      return 'file-icon-default'
+    },
+
+    // ----------- 根据文件后缀获取 ContentType
+    getContentType(ext) {
+      const types = {
+        doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        pdf: 'application/pdf',
+        xls: 'application/vnd.ms-excel',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ppt: 'application/vnd.ms-powerpoint',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        txt: 'text/plain',
+        zip: 'application/zip',
+        rar: 'application/x-rar-compressed'
+      }  // 文件后缀与 ContentType 对照表
+      return types[ext] || 'application/octet-stream'
+    },
+
+    // ----------- 格式化文件大小
+    formatFileSize(size) {
+      if (!size) return '0B'
+      if (size >= 1024 * 1024 * 1024) return (size / (1024 * 1024 * 1024)).toFixed(2) + 'G'
+      if (size >= 1024 * 1024) return (size / (1024 * 1024)).toFixed(2) + 'M'
+      if (size >= 1024) return (size / 1024).toFixed(2) + 'K'
+      return size + 'B'
     }
   }
 }
@@ -1674,6 +1995,12 @@ export default {
   flex-direction: column;
   height: 100vh;
   background: #ededed;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+
+  &.chat-page-ready {
+    opacity: 1;
+  }
 
   /* 引用参考框（气泡外部，微信风格） */
   .msg-quote-ref-box {
@@ -1681,8 +2008,8 @@ export default {
     color: gray;
     font-size: 24rpx;
     margin-top: 6rpx;
-    padding: 8rpx 16rpx;
-    border-radius: 6rpx;
+    padding: 10rpx 20rpx;
+    border-radius: 8rpx;
     max-width: 100%;
     box-sizing: border-box;
     word-break: break-all;
@@ -1720,7 +2047,7 @@ export default {
       justify-content: center;
       padding: 24rpx 0;
       .time-divider-text {
-        font-size: 24rpx;
+        font-size: 26rpx;
         color: #989393;
       }
     }
@@ -1770,7 +2097,7 @@ export default {
         }
         /* 已读/未读标记文字 */
         .msg-read-status {
-          font-size: 22rpx;
+          font-size: 24rpx;
           color: #b2b2b2;
           margin-right: 12rpx;
           margin-bottom: 8rpx;
@@ -1787,7 +2114,6 @@ export default {
         height: 84rpx;
         border-radius: 12rpx;
         flex-shrink: 0;
-        background: #d8d8d8;
       }
 
       /* 群聊发送人名称 */
@@ -1814,7 +2140,7 @@ export default {
       /* 气泡 */
       .msg-bubble {
         width: fit-content;
-        max-width: 510rpx;
+        max-width: 516rpx;
         padding: 18rpx 22rpx;
         border-radius: 10rpx;
         position: relative;
@@ -1850,6 +2176,11 @@ export default {
           line-height: 1.4;
           color: #191919;
           word-break: break-all;
+
+          /* @名字 片段显示橙色 */
+          .msg-at-text {
+            // color: #1095ff;
+          }
         }
 
         /* 图片消息气泡：去掉背景色和内边距，只保留浅边框 */
@@ -1875,7 +2206,16 @@ export default {
         &.msg-bubble-link {
           background: transparent !important;
           padding: 0;
-          max-width: 480rpx;
+          max-width: 520rpx;
+
+          &::after { display: none; }
+        }
+
+        /* 文件卡片气泡：去掉气泡背景，用卡片自身样式 */
+        &.msg-bubble-file {
+          background: transparent !important;
+          padding: 0;
+          max-width: 520rpx;
 
           &::after { display: none; }
         }
@@ -1896,9 +2236,9 @@ export default {
           .link-card-header {
             display: flex;
             align-items: center;
-            font-size: 24rpx;
+            font-size: 26rpx;
             color: #8c8c8c;
-            padding: 18rpx 26rpx 14rpx;
+            padding: 20rpx 28rpx 16rpx;
             border-bottom: 1rpx solid rgba(15, 23, 42, 0.04);
 
             &::before {
@@ -1915,23 +2255,23 @@ export default {
           .link-card-body {
             display: flex;
             align-items: center;
-            padding: 24rpx 26rpx;
+            padding: 28rpx 28rpx;
 
             .link-card-logo {
-              width: 88rpx;
-              height: 88rpx;
+              width: 96rpx;
+              height: 96rpx;
               border-radius: 12rpx;
               flex-shrink: 0;
-              margin-right: 18rpx;
+              margin-right: 20rpx;
               background: #f4f5f7;
             }
 
             .link-card-logo-placeholder {
-              width: 88rpx;
-              height: 88rpx;
+              width: 96rpx;
+              height: 96rpx;
               border-radius: 12rpx;
               flex-shrink: 0;
-              margin-right: 18rpx;
+              margin-right: 20rpx;
               background: linear-gradient(135deg, #f0f3f7, #e8edf3);
               display: flex;
               align-items: center;
@@ -1951,10 +2291,10 @@ export default {
               gap: 8rpx;
 
               .link-card-title {
-                font-size: 26rpx;
+                font-size: 28rpx;
                 color: #2c3e50;
                 font-weight: 400;
-                line-height: 36rpx;
+                line-height: 40rpx;
                 display: -webkit-box;
                 overflow: hidden;
                 line-clamp: 2;
@@ -1963,7 +2303,7 @@ export default {
               }
 
               .link-card-url {
-                font-size: 22rpx;
+                font-size: 24rpx;
                 color: #a8adb5;
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -1980,7 +2320,7 @@ export default {
 
         /* 语音消息 */
         .msg-audio {
-          min-width: 160rpx;
+          min-width: 146rpx;
           height: 44rpx;
           display: flex;
           align-items: center;
@@ -2020,6 +2360,66 @@ export default {
             &:nth-child(5) { animation-delay: 0.4s; }
           }
         }
+
+        /* 文件卡片 */
+        .msg-file-card {
+          display: flex;
+          align-items: center;
+          width: 438rpx;
+          padding: 26rpx 24rpx;
+          border-radius: 16rpx;
+          background: #fff;
+          box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.06);
+
+          .file-card-icon {
+            width: 80rpx;
+            height: 80rpx;
+            border-radius: 12rpx;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-right: 20rpx;
+
+            text {
+              color: #fff;
+              font-size: 24rpx;
+              font-weight: 600;
+              text-transform: uppercase;
+            }
+
+            &.file-icon-word { background: #2b579a; }
+            &.file-icon-excel { background: #217346; }
+            &.file-icon-ppt { background: #d24726; }
+            &.file-icon-pdf { background: #e80202; }
+            &.file-icon-zip { background: #f0a020; }
+            &.file-icon-image { background: #2b8a4a; }
+            &.file-icon-video { background: #7b1fa2; }
+            &.file-icon-audio { background: #7b1fa2; }
+            &.file-icon-default { background: #666; }
+          }
+
+          .file-card-info {
+            flex: 1;
+            overflow: hidden;
+
+            .file-card-name {
+              display: block;
+              font-size: 30rpx;
+              color: #333;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            }
+
+            .file-card-size {
+              display: block;
+              margin-top: 8rpx;
+              font-size: 26rpx;
+              color: #999;
+            }
+          }
+        }
       }
     }
 
@@ -2032,13 +2432,10 @@ export default {
   /* 底部输入区 */
   .chat-footer {
     flex-shrink: 0;
+    padding-bottom: 16rpx;
     background: rgba(242, 242, 242, 0.98);
     border-top: 1rpx solid rgba(15, 23, 42, 0.07);
     box-shadow: 0 -8rpx 28rpx rgba(15, 23, 42, 0.04);
-
-    &.footer-safe-bottom {
-      padding-bottom: env(safe-area-inset-bottom);
-    }
 
     /* 引用预览条 */
     .quote-preview-bar {
@@ -2087,16 +2484,16 @@ export default {
     }
 
     .footer-input-row {
-      min-height: 92rpx;
-      padding: 12rpx 14rpx;
+      min-height: 108rpx;
+      padding: 4rpx 14rpx 0;
       display: flex;
       align-items: center;
-      gap: 10rpx;
+      gap: 12rpx;
 
       /* 左右工具按钮 */
       .footer-tool-btn {
-        width: 68rpx;
-        height: 68rpx;
+        width: 64rpx;
+        height: 64rpx;
         flex-shrink: 0;
         display: flex;
         align-items: center;
@@ -2109,111 +2506,10 @@ export default {
           transform: scale(0.94);
         }
 
-        /* 语音切换图标 */
-        .icon-voice-switch {
-          width: 43rpx;
-          height: 43rpx;
-          border: 3rpx solid #272b30;
-          border-radius: 50%;
-          box-sizing: border-box;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-
-          .voice-switch-wave {
-            height: 22rpx;
-            display: flex;
-            align-items: center;
-            gap: 4rpx;
-
-            text {
-              width: 3rpx;
-              border-radius: 4rpx;
-              background: #272b30;
-
-              &:nth-child(1) { height: 9rpx; }
-              &:nth-child(2) { height: 14rpx; }
-              &:nth-child(3) { height: 22rpx; }
-            }
-          }
-        }
-
-        /* 键盘切换图标 */
-        .icon-keyboard {
-          width: 44rpx;
-          height: 34rpx;
-          padding: 6rpx;
-          border: 3rpx solid #272b30;
-          border-radius: 7rpx;
-          box-sizing: border-box;
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 4rpx;
-
-          text {
-            border-radius: 2rpx;
-            background: #272b30;
-          }
-        }
-
-        /* 表情图标 */
-        .icon-smile-modern {
-          position: relative;
-          width: 43rpx;
-          height: 43rpx;
-          border: 3rpx solid #272b30;
-          border-radius: 50%;
-          box-sizing: border-box;
-
-          .smile-eye {
-            position: absolute;
-            top: 11rpx;
-            width: 5rpx;
-            height: 6rpx;
-            border-radius: 50%;
-            background: #272b30;
-
-            &.left { left: 10rpx; }
-            &.right { right: 10rpx; }
-          }
-
-          .smile-mouth {
-            position: absolute;
-            left: 50%;
-            bottom: 8rpx;
-            width: 17rpx;
-            height: 8rpx;
-            border: 3rpx solid #272b30;
-            border-top: 0;
-            border-radius: 0 0 12rpx 12rpx;
-            transform: translateX(-50%);
-            box-sizing: border-box;
-          }
-        }
-
-        /* 更多加号图标 */
-        .icon-plus-modern {
-          position: relative;
-          width: 43rpx;
-          height: 43rpx;
-          border: 3rpx solid #272b30;
-          border-radius: 50%;
-          box-sizing: border-box;
-
-          text {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 20rpx;
-            height: 3rpx;
-            border-radius: 3rpx;
-            background: #272b30;
-            transform: translate(-50%, -50%);
-
-            &:nth-child(2) {
-              transform: translate(-50%, -50%) rotate(90deg);
-            }
-          }
+        /* 工具按钮图片图标 */
+        .footer-tool-icon {
+          width: 56rpx;
+          height: 56rpx;
         }
       }
 
@@ -2221,7 +2517,7 @@ export default {
       .footer-input {
         flex: 1;
         min-width: 0;
-        height: 72rpx;
+        height: 80rpx;
         padding: 0 24rpx;
         border: 1rpx solid rgba(15, 23, 42, 0.04);
         border-radius: 18rpx;
@@ -2241,8 +2537,7 @@ export default {
       .hold-talk-btn {
         flex: 1;
         min-width: 0;
-        height: 72rpx;
-        border: 1rpx solid rgba(15, 23, 42, 0.06);
+        height: 80rpx;
         border-radius: 18rpx;
         box-sizing: border-box;
         background: #fff;
@@ -2250,7 +2545,7 @@ export default {
         align-items: center;
         justify-content: center;
         color: #30343a;
-        font-size: 29rpx;
+        font-size: 30rpx;
         font-weight: 500;
         box-shadow: 0 2rpx 10rpx rgba(15, 23, 42, 0.035);
 
@@ -2267,7 +2562,7 @@ export default {
 
       /* 发送按钮 */
       .footer-send-btn {
-        height: 66rpx;
+        height: 64rpx;
         padding: 0 24rpx;
         flex-shrink: 0;
         border-radius: 14rpx;
@@ -2282,7 +2577,7 @@ export default {
         .footer-send-text {
           color: #fff;
           font-size: 27rpx;
-          font-weight: 600;
+          font-weight: 500;
         }
       }
     }
@@ -2314,8 +2609,8 @@ export default {
           margin-bottom: 32rpx;
 
           .panel-icon-wrap {
-            width: 112rpx;
-            height: 112rpx;
+            width: 104rpx;
+            height: 104rpx;
             background: #fff;
             border: 1rpx solid rgba(15, 23, 42, 0.04);
             border-radius: 24rpx;
@@ -2323,107 +2618,17 @@ export default {
             align-items: center;
             justify-content: center;
             margin-bottom: 14rpx;
-            box-shadow: 0 6rpx 18rpx rgba(15, 23, 42, 0.05);
+            box-shadow: 0 3px 9px rgb(224 224 224);
 
-            /* 相册图标 */
-            .icon-album {
-              position: relative;
-              width: 48rpx;
-              height: 48rpx;
-
-              .icon-album-rect {
-                width: 48rpx;
-                height: 40rpx;
-                border: 3rpx solid #555;
-                border-radius: 6rpx;
-                position: absolute;
-                bottom: 0;
-                box-sizing: border-box;
-              }
-              .icon-album-circle {
-                width: 16rpx;
-                height: 16rpx;
-                border: 3rpx solid #555;
-                border-radius: 50%;
-                position: absolute;
-                top: 4rpx;
-                right: 8rpx;
-                box-sizing: border-box;
-              }
-            }
-
-            /* 拍照图标 */
-            .icon-camera {
-              position: relative;
-              width: 48rpx;
-              height: 48rpx;
-
-              .icon-camera-body {
-                width: 48rpx;
-                height: 36rpx;
-                border: 3rpx solid #555;
-                border-radius: 6rpx;
-                position: absolute;
-                bottom: 0;
-                box-sizing: border-box;
-              }
-              .icon-camera-lens {
-                width: 18rpx;
-                height: 18rpx;
-                border: 3rpx solid #555;
-                border-radius: 50%;
-                position: absolute;
-                bottom: 9rpx;
-                left: 50%;
-                transform: translateX(-50%);
-                box-sizing: border-box;
-              }
-            }
-
-            /* 语音图标 */
-            .icon-voice {
-              position: relative;
-              width: 48rpx;
-              height: 52rpx;
-
-              .icon-voice-head {
-                width: 22rpx;
-                height: 32rpx;
-                border: 3rpx solid #555;
-                border-radius: 14rpx;
-                position: absolute;
-                top: 0;
-                left: 13rpx;
-                box-sizing: border-box;
-              }
-
-              .icon-voice-body {
-                width: 38rpx;
-                height: 28rpx;
-                border: 3rpx solid #555;
-                border-top: none;
-                border-radius: 0 0 20rpx 20rpx;
-                position: absolute;
-                top: 12rpx;
-                left: 5rpx;
-                box-sizing: border-box;
-              }
-
-              .icon-voice-line {
-                width: 3rpx;
-                height: 12rpx;
-                background: #555;
-                position: absolute;
-                bottom: 0;
-                left: 23rpx;
-              }
+            /* 面板按钮图片图标 */
+            .panel-icon-img {
+              width: 54rpx;
             }
 
             /* 文件图标 */
             .icon-file {
               position: relative;
-              width: 40rpx;
-              height: 48rpx;
+              width: 38rpx;
 
               .icon-file-body {
                 width: 32rpx;
@@ -2457,41 +2662,63 @@ export default {
               }
             }
 
-            /* 产品图标 */
-            .icon-product {
-              position: relative;
-              width: 44rpx;
-              height: 48rpx;
-
-              .icon-product-tag {
-                width: 16rpx;
-                height: 16rpx;
-                background: #555;
-                border-radius: 4rpx;
-                position: absolute;
-                top: 0;
-                left: 0;
-              }
-
-              .icon-product-line {
-                width: 28rpx;
-                height: 3rpx;
-                background: #555;
-                border-radius: 2rpx;
-                position: absolute;
-                left: 16rpx;
-
-                &.top { top: 4rpx; }
-                &.mid { top: 14rpx; }
-                &.bot { top: 24rpx; }
-              }
-            }
           }
 
           .panel-label {
             font-size: 24rpx;
             color: #626872;
           }
+        }
+      }
+
+      /* @群成员面板 */
+      &.at-panel {
+        .at-scroll {
+          max-height: 460rpx;
+        }
+
+        .at-item {
+          display: flex;
+          align-items: center;
+          padding: 16rpx 12rpx;
+          border-radius: 12rpx;
+
+          &:active {
+            background: #e9ebef;
+          }
+
+          .at-avatar {
+            width: 64rpx;
+            height: 64rpx;
+            border-radius: 8rpx;
+            margin-right: 20rpx;
+            flex-shrink: 0;
+          }
+
+          /* @全体成员 的头像占位块 */
+          .at-all-avatar {
+            background: #ff8c1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            text {
+              color: #fff;
+              font-size: 30rpx;
+            }
+          }
+
+          .at-name {
+            font-size: 30rpx;
+            color: #20242a;
+          }
+        }
+
+        .at-empty {
+          padding: 60rpx 0;
+          text-align: center;
+          font-size: 26rpx;
+          color: #999;
         }
       }
 
@@ -2615,70 +2842,88 @@ export default {
 .msg-action-popup {
   position: absolute;
   z-index: 1001;
-  width: 360rpx;
-  background: #2b2b2b;
-  border-radius: 12rpx;
-  padding: 14rpx 0;
-  box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.2);
+  background: rgba(44, 44, 46, 0.98);
+  border-radius: 16rpx;
+  padding: 8rpx;
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.28);
+  animation: actionPopIn 0.16s ease-out;
+  transform-origin: center bottom;
+
+  &.msg-action-popup-below {
+    transform-origin: center top;
+  }
 
   .msg-action-arrow {
     position: absolute;
-    bottom: -12rpx;
+    bottom: -11rpx;
     left: 50%;
     transform: translateX(-50%);
     width: 0;
     height: 0;
     border-left: 12rpx solid transparent;
     border-right: 12rpx solid transparent;
-    border-top: 12rpx solid #2b2b2b;
+    border-top: 12rpx solid rgba(44, 44, 46, 0.98);
   }
 
   &.msg-action-popup-below {
     .msg-action-arrow {
       bottom: auto;
-      top: -12rpx;
+      top: -11rpx;
       border-top: none;
       border-left: 12rpx solid transparent;
       border-right: 12rpx solid transparent;
-      border-bottom: 12rpx solid #2b2b2b;
+      border-bottom: 12rpx solid rgba(44, 44, 46, 0.98);
     }
   }
 
   .msg-action-list {
     display: flex;
-    align-items: center;
+    align-items: stretch;
   }
 
   .msg-action-item {
-    flex: 1;
+    width: 116rpx;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 0 16rpx;
+    padding: 16rpx 0 12rpx;
+    border-radius: 10rpx;
 
     &:active {
-      opacity: 0.55;
+      background: rgba(255, 255, 255, 0.12);
     }
   }
 
   .msg-action-divider {
     width: 1rpx;
-    height: 44rpx;
-    background: rgba(255, 255, 255, 0.12);
+    margin: 14rpx 0;
+    background: rgba(255, 255, 255, 0.14);
     flex-shrink: 0;
   }
 
   .msg-action-icon {
-    font-size: 32rpx;
+    font-size: 34rpx;
     color: #fff;
-    margin-bottom: 6rpx;
+    margin-bottom: 8rpx;
+    line-height: 1;
   }
 
   .msg-action-label {
     font-size: 22rpx;
-    color: #fff;
+    color: rgba(255, 255, 255, 0.92);
     line-height: 1;
+  }
+}
+
+@keyframes actionPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 </style>

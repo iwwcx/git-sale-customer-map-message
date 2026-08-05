@@ -19,13 +19,13 @@
             <image
               v-if="item.SessionCategoryID == 52"
               class="msg-avatar"
-              src="https://img2cdn.global-dsc.cn/dgzz_img/6ddfb1a24a56be29919936e7e6641f76.jpg"
+              src="https://prodimg.global-dsc.cn/73/dbe177/2943e2/e83fb3/a2e15e/a89419"
               mode="aspectFill"
             />
             <image
               v-else-if="item.SessionCategoryID == 54"
               class="msg-avatar"
-              src="https://img2cdn.global-dsc.cn/dgzz_img/9f804858d1f0854707bd90b942326fe6.jpg"
+              src="https://prodimg.global-dsc.cn/bf/304d36/bffe5b/74a03b/de75a8/748605"
               mode="aspectFill"
             />
             <image
@@ -45,7 +45,7 @@
           <view class="msg-content">
             <view class="msg-row-top">
               <view class="msg-name-wrap">
-                <text class="msg-name">{{ item.SessionName }}</text>
+                <text class="msg-name">{{ item.SessionName }} <text style="color: #6189ff; font-size: 26rpx;">{{ item.CompanyBrand }}</text></text>
                 <text v-if="item.SessionCategoryID == 52" class="msg-group-tag">群聊</text>
                 <text v-if="item.SessionCategoryID == 54" class="msg-notice-tag">通知</text>
               </view>
@@ -72,6 +72,7 @@
 import { getChatList, getSummary } from '@/im-message/api/index.js'
 import { IMService } from '@/im-message/services/im.js'
 import { RecentService } from '@/im-message/services/recent.js'
+import '@/im-message/services/message.js'  // 引入消息分发层，模块加载即向 IM SDK 注册接收回调，列表页才能实时收到新消息
 import { getProductImageUrlChat, formatTime, parseMsgText } from '@/common/utils/index.js'
 
 export default {
@@ -251,13 +252,13 @@ export default {
 .msg-item {
   display: flex;
   align-items: center;
-  padding: 24rpx 32rpx;
+  padding: 26rpx 32rpx;
   position: relative;
 }
 .msg-item::after {
   content: '';
   position: absolute;
-  left: 128rpx;
+  left: 132rpx;
   right: 0;
   bottom: 0;
   height: 1rpx;
@@ -270,30 +271,28 @@ export default {
 
 .msg-avatar-box {
   position: relative;
-  width: 88rpx;
-  height: 88rpx;
+  width: 92rpx;
+  height: 92rpx;
   margin-right: 24rpx;
   flex-shrink: 0;
 }
 .msg-avatar {
-  width: 88rpx;
-  height: 88rpx;
+  width: 92rpx;
+  height: 92rpx;
   border-radius: 16rpx;
-  background: #f0f0f0;
 }
 .msg-badge {
   position: absolute;
-  top: -8rpx;
+  top: -14rpx;
   right: -12rpx;
-  min-width: 38rpx;
-  height: 38rpx;
+  min-width: 36rpx;
+  height: 36rpx;
   padding: 0 10rpx;
   border-radius: 19rpx;
   background: #fa5151;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2rpx solid #fff;
   box-sizing: border-box;
 }
 .msg-badge-text {
@@ -321,9 +320,8 @@ export default {
   overflow: hidden;
 }
 .msg-name {
-  font-size: 30rpx;
-  color: #4c4c4c;
-  font-weight: 500;
+  font-size: 32rpx;
+  color: #000;
   max-width: 380rpx;
   white-space: nowrap;
   overflow: hidden;
@@ -361,12 +359,12 @@ export default {
 }
 .msg-preview {
   flex: 1;
-  font-size: 26rpx;
+  font-size: 27rpx;
   color: #8c8c8c;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 6rpx;
+  margin-top: 10rpx;
 }
 
 .msg-empty {
