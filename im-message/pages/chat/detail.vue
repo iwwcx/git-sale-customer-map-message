@@ -28,7 +28,14 @@
 
         <!-- 对方消息 -->
         <view :key="'msg-left-' + index" class="msg-row msg-row-left" v-else-if="msg.SendUserID !== myUserId">
-          <image class="msg-avatar" :src="(groupMembers[msg.SendUserID] && groupMembers[msg.SendUserID].UserLogo) || interlocutorLogo || defaultAvatar" mode="aspectFill" @tap="onAvatarTap" @longpress.stop="onAvatarLongPress(msg)" />
+          <image
+            class="msg-avatar"
+            :src="getLeftAvatar(msg)"
+            mode="aspectFill"
+            @error="onAvatarLoadError('u' + msg.SendUserID)"
+            @tap="onAvatarTap(msg)"
+            @longpress.stop="onAvatarLongPress(msg)"
+          />
           <view class="msg-content-col">
             <text v-if="categoryId === '52' && groupMembers[msg.SendUserID]" class="msg-sender-name">{{ groupMembers[msg.SendUserID].UserName }}</text>
             <view :id="'msg-bubble-' + index" class="msg-bubble msg-bubble-left" :class="{ 'msg-bubble-image': msg.MsgType === 2, 'msg-bubble-link': msg.MsgType === 21, 'msg-bubble-file': msg.MsgType === 7 }" @longpress.stop.prevent="onMsgLongPress(msg, index)">
@@ -41,7 +48,7 @@
               </view>
               <!-- ------------------ 文件 ---------------- -->
               <view v-else-if="msg.MsgType === 7" class="msg-file-card" @tap.stop="onFileTap(msg)">
-                <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName) }}</text></view>
+                <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName).slice(0, 4) }}</text></view>
                 <view class="file-card-info">
                   <text class="file-card-name">{{ msg.FileName }}</text>
                   <text class="file-card-size">{{ formatFileSize(msg.FileSize) }}</text>
@@ -88,7 +95,7 @@
                 </view>
                 <!-- ------------------ 文件 ---------------- -->
                 <view v-else-if="msg.MsgType === 7" class="msg-file-card" @tap.stop="onFileTap(msg)">
-                  <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName) }}</text></view>
+                  <view class="file-card-icon" :class="getFileIconClass(msg.FileName)"><text>{{ getFileExt(msg.FileName).slice(0, 4) }}</text></view>
                   <view class="file-card-info">
                     <text class="file-card-name">{{ msg.FileName }}</text>
                     <text class="file-card-size">{{ formatFileSize(msg.FileSize) }}</text>
@@ -118,7 +125,7 @@
               <text class="msg-quote-ref-text">{{ msg.QuoteText }}</text>
             </view>
           </view>
-          <image class="msg-avatar" :src="myAvatar" mode="aspectFill" @tap="onAvatarTap" />
+          <image class="msg-avatar" :src="getMyAvatar()" mode="aspectFill" @error="onAvatarLoadError('my')" @tap="onMyAvatarTap" />
         </view>
       </template>
 
@@ -225,7 +232,7 @@
             <text class="at-name">全体成员</text>
           </view>
           <view class="at-item" v-for="member in atMemberList" :key="member.UserID" @tap="onAtMemberTap(member)">
-            <image class="at-avatar" :src="member.UserLogo || defaultAvatar" mode="aspectFill" />
+            <image class="at-avatar" :src="getMemberAvatar(member)" mode="aspectFill" @error="onAvatarLoadError('u' + member.UserID)" />
             <text class="at-name">{{ member.UserName }}</text>
           </view>
           <view v-if="!atMemberList.length" class="at-empty">没有匹配的群成员</view>
@@ -268,6 +275,11 @@
             <text class="msg-action-label">复制</text>
           </view>
           <view class="msg-action-divider"></view>
+          <view class="msg-action-item" @tap.stop="onActionForward">
+            <text class="msg-action-icon">📤</text>
+            <text class="msg-action-label">转发</text>
+          </view>
+          <view class="msg-action-divider"></view>
           <view class="msg-action-item" @tap.stop="onActionQuote">
             <text class="msg-action-icon">💬</text>
             <text class="msg-action-label">引用</text>
@@ -282,11 +294,41 @@
         </view>
       </view>
     </view>
+
+    <!-- 转发联系人弹窗 -->
+    <view v-if="forwardVisible" class="forward-mask" @tap="hideForwardPopup">
+      <view class="forward-sheet" @tap.stop="">
+        <view class="forward-header">
+          <text class="forward-title">选择联系人</text>
+          <text class="forward-close" @tap="hideForwardPopup">✕</text>
+        </view>
+        <scroll-view scroll-y class="forward-list">
+          <view v-if="forwardLoading" class="forward-empty"><text>加载中...</text></view>
+          <view v-else-if="!forwardContacts.length" class="forward-empty"><text>暂无最近联系人</text></view>
+          <view v-for="item in forwardContacts" :key="item.ID" class="forward-item" @tap="onForwardSelect(item)">
+            <image class="forward-avatar" :src="getForwardAvatar(item)" mode="aspectFill" />
+            <text class="forward-name">{{ item.SessionName }}</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+
+    <!-- 转发确认弹窗 -->
+    <view v-if="forwardConfirmVisible" class="forward-confirm-mask" @tap="onForwardCancel">
+      <view class="forward-confirm-dialog" @tap.stop="">
+        <text class="forward-confirm-title">确认转发</text>
+        <text class="forward-confirm-desc">将消息发送给"{{ forwardTarget ? forwardTarget.SessionName : '' }}"？</text>
+        <view class="forward-confirm-btns">
+          <text class="forward-confirm-btn forward-confirm-cancel" @tap="onForwardCancel">取消</text>
+          <text class="forward-confirm-btn forward-confirm-ok" @tap="onForwardConfirm">确定</text>
+        </view>
+      </view>
+    </view>
   </view>
 </template>
 
 <script>
-import { getRecordList, saveRecordByClient, getGroupUserList, saveDocumentLife, getDocFileInfo } from '../../api/index.js'
+import { getRecordList, saveRecordByClient, getGroupUserList, saveDocumentLife, getDocFileInfo, getFile3DView, getFile2DView, getChatList } from '../../api/index.js'
 import request from '../../api/request.js'
 import { IMService } from '../../services/im.js'
 import { MessageService } from '../../services/message.js'
@@ -305,6 +347,7 @@ export default {
       defaultAvatar: 'https://img2cdn.global-dsc.cn/dgzz_img/8520f53eeff21f5a388f30b67e54e287.png',  // 默认头像
       myAvatar: 'https://img2cdn.global-dsc.cn/dgzz_img/8520f53eeff21f5a388f30b67e54e287.png',  // 我的头像（静态占位）
       myUserId: '',  // 当前用户ID
+      avatarErrorMap: {},  // 头像加载失败的记录表，失败过的 key 直接用默认头像
       messageList: [],  // 消息列表
       inputText: '',  // 输入内容
       isFocus: false,  // 输入框聚焦状态
@@ -342,7 +385,14 @@ export default {
       actionMenuTarget: null,  // 当前操作菜单对应的消息
       quoteMessage: null,  // 当前引用的消息对象
       quoteText: '',  // 引用预览文本
-      quoteAuthor: ''  // 引用消息的发送者名称
+      quoteAuthor: '',  // 引用消息的发送者名称
+      forwardVisible: false,  // 是否显示转发联系人弹窗
+      forwardContacts: [],  // 最近联系人列表
+      forwardTarget: null,  // 选中的转发目标
+      forwardConfirmVisible: false,  // 是否显示转发确认弹窗
+      forwardLoading: false,  // 联系人列表加载中
+      forwardSending: false,  // 转发消息发送中
+      forwardMessage: null  // 待转发的原始消息
     }
   },
   onLoad(options) {
@@ -463,15 +513,53 @@ export default {
       })
     },
 
-    // ----------- 点击头像（群聊时跳转群信息页）
-    onAvatarTap() {
+    // ----------- 获取左侧对方消息头像，加载失败过的用默认头像
+    getLeftAvatar(msg) {
+      if (this.avatarErrorMap['u' + msg.SendUserID]) return this.defaultAvatar
+      const member = this.groupMembers[msg.SendUserID]  // 群成员信息
+      return (member && member.UserLogo) || this.interlocutorLogo || this.defaultAvatar
+    },
+
+    // ----------- 获取右侧我的头像，加载失败过用默认头像
+    getMyAvatar() {
+      return this.avatarErrorMap['my'] ? this.defaultAvatar : this.myAvatar
+    },
+
+    // ----------- 获取 @ 面板群成员头像，加载失败过用默认头像
+    getMemberAvatar(member) {
+      if (this.avatarErrorMap['u' + member.UserID]) return this.defaultAvatar
+      return member.UserLogo || this.defaultAvatar
+    },
+
+    // ----------- 头像加载失败时记录到 avatarErrorMap，后续渲染用默认头像
+    onAvatarLoadError(key) {
+      this.$set(this.avatarErrorMap, key, true)
+    },
+
+    // ----------- 点击对方头像，跳转个人信息页
+    onAvatarTap(msg) {
       if (this._avatarLongPressed) {  // 长按触发的 tap 不跳转
         this._avatarLongPressed = false
         return
       }
-      if (this.categoryId === '52') {
-        this.goGroupInfo()
-      }
+      if (!msg || !msg.SendUserID) return  // 没有发送者信息不处理
+      const userId = String(msg.SendUserID)  // 目标用户ID
+      const member = this.groupMembers[userId]  // 群成员信息（群聊才有）
+      const userName = (member && member.UserName) || this.interlocutorName || ''  // 用户名称
+      const userLogo = (member && member.UserLogo) || this.interlocutorLogo || ''  // 用户头像
+      uni.navigateTo({
+        url: `/im-message/pages/user/info?userId=${userId}&name=${encodeURIComponent(userName)}&logo=${encodeURIComponent(userLogo)}`
+      })
+    },
+
+    // ----------- 点击自己的头像，跳转个人信息页
+    onMyAvatarTap() {
+      const userInfo = uni.getStorageSync('userInfo') || {}
+      const userName = userInfo.UserName || userInfo.NickName || ''
+      const userLogo = userInfo.UserLogo || ''
+      uni.navigateTo({
+        url: `/im-message/pages/user/info?userId=${this.myUserId}&name=${encodeURIComponent(userName)}&logo=${encodeURIComponent(userLogo)}`
+      })
     },
 
     // ----------- 长按群成员头像，把 @Ta 插入输入框（仅群聊）
@@ -538,7 +626,7 @@ export default {
           categoryId: this.categoryId,
           dataId: this.dataId,
           msgId: 0,
-          pageSize: 35
+          pageSize: 25
         })
         // 兼容两种返回格式
         const list = res.List || (res.Data && res.Data.List) || []
@@ -580,7 +668,7 @@ export default {
           categoryId: this.categoryId,
           dataId: this.dataId,
           msgId: 0,
-          pageSize: 35
+          pageSize: 25
         })
         const list = res.List || (res.Data && res.Data.List) || []  // 最新一页消息（倒序）
         if (!list.length) return
@@ -619,7 +707,7 @@ export default {
           categoryId: this.categoryId,
           dataId: this.dataId,
           msgId: msgId,
-          pageSize: 35
+          pageSize: 25
         })
         const list = res.List || (res.Data && res.Data.List) || []
         const hasMore = res.HasMore !== undefined ? res.HasMore : (res.Data && res.Data.HasMore) || false
@@ -803,9 +891,12 @@ export default {
       return msg.IsRevoke || /^<m_revoke,[^>]*>$/i.test(String(msg.MsgText || ''))
     },
 
-    // ----------- 判断消息是否可撤回（仅自己发的消息显示撤回按钮）
+    // ----------- 判断消息是否可撤回（仅自己发的、30 分钟内的消息显示撤回按钮）
     canRevoke(msg) {
-      return !!msg && String(msg.SendUserID) === String(this.myUserId)
+      if (!msg || String(msg.SendUserID) !== String(this.myUserId)) return false  // 非本人消息不能撤回
+      const msgTime = new Date(msg.MsgTime).getTime()  // 消息发送时间戳
+      if (!msgTime || Date.now() - msgTime > 30 * 60 * 1000) return false  // 超过30分钟不显示撤回按钮
+      return true
     },
 
     // ----------- 长按消息气泡弹出微信式操作菜单
@@ -817,7 +908,7 @@ export default {
         if (!rect) return
         const systemInfo = uni.getSystemInfoSync()
         const rpxToPx = (rpx) => rpx * systemInfo.windowWidth / 750  // rpx 转 px
-        const itemCount = this.canRevoke(msg) ? 3 : 2  // 菜单按钮数，自己的消息多一个撤回
+        const itemCount = this.canRevoke(msg) ? 4 : 3  // 菜单按钮数：复制+引用+转发+撤回(自己消息)
         const popupWidth = rpxToPx(itemCount * 116 + 16)  // 菜单宽度，按按钮数自适应
         const popupHeight = rpxToPx(108)  // 菜单高度 108rpx
         const arrowSize = rpxToPx(12)  // 箭头高度 12rpx
@@ -886,10 +977,103 @@ export default {
       if (target) this.revokeMessage(target)
     },
 
+    // ----------- 点击菜单转发，打开联系人弹窗
+    async onActionForward() {
+      const target = this.actionMenuTarget  // 先保存引用，hideActionMenu 会清空
+      this.hideActionMenu()
+      if (!target) return
+      this.forwardMessage = target  // 记录待转发的原始消息
+      this.forwardVisible = true
+      this.forwardLoading = true
+      this.forwardContacts = []
+      try {
+        const res = await getChatList()
+        const list = res.data || res.Data || []  // 兼容不同响应层级
+        // 排除当前会话，不能转发给自己
+        this.forwardContacts = list.filter(item => {
+          const itemKey = item.SessionCategoryID + ':' + item.SessionDataID
+          return itemKey !== this.interlocutorKey
+        })
+      } catch (e) {
+        console.error('获取联系人列表失败:', e)
+        uni.showToast({ title: '获取联系人列表失败', icon: 'none' })
+      } finally {
+        this.forwardLoading = false
+      }
+    },
+
+    // ----------- 选择转发联系人，弹出二次确认
+    onForwardSelect(contact) {
+      this.forwardTarget = contact  // 选中的联系人
+      this.forwardConfirmVisible = true
+    },
+
+    // ----------- 确认转发，把原始消息内容发送给选中的联系人
+    async onForwardConfirm() {
+      const msg = this.forwardMessage  // 待转发的原始消息
+      const contact = this.forwardTarget  // 选中的联系人
+      if (!msg || !contact || this.forwardSending) return
+      this.forwardSending = true
+      try {
+        const msgText = msg.MsgText  // 原始消息的协议格式内容
+        const domain = this.generateGuid()  // 转发消息的唯一标识
+        const isGroup = String(contact.SessionCategoryID) === '52'  // 是否群聊
+        const recvDataId = String(contact.SessionDataID)  // 接收者ID
+        // 通过 IM SDK 实时发送给目标联系人
+        await IMService.send(recvDataId, msgText, domain, isGroup)
+        // 保存消息记录到服务端
+        await saveRecordByClient({
+          RecvDataID: recvDataId,
+          SessionCategoryID: String(contact.SessionCategoryID),
+          MsgText: msgText,
+          Domain: domain
+        })
+        // 更新目标联系人的会话列表最新消息
+        const targetKey = String(contact.SessionCategoryID) + ':' + String(contact.SessionDataID)
+        RecentService.new_message(targetKey, {
+          MsgText: msgText,
+          MsgTime: this.formatNow(),
+          SendUserID: this.myUserId,
+          Domain: domain,
+          IsMe: true
+        })
+        uni.showToast({ title: '已转发', icon: 'success' })
+        this.hideForwardPopup()
+      } catch (e) {
+        console.error('转发失败:', e)
+        uni.showToast({ title: '转发失败', icon: 'none' })
+      } finally {
+        this.forwardSending = false
+      }
+    },
+
+    // ----------- 取消转发确认
+    onForwardCancel() {
+      this.forwardConfirmVisible = false
+      this.forwardTarget = null
+    },
+
+    // ----------- 关闭转发弹窗，清理所有状态
+    hideForwardPopup() {
+      this.forwardVisible = false
+      this.forwardConfirmVisible = false
+      this.forwardTarget = null
+      this.forwardContacts = []
+      this.forwardMessage = null
+    },
+
+    // ----------- 获取转发联系人头像
+    getForwardAvatar(item) {
+      if (item.SessionCategoryID == 52) {
+        return 'https://img2cdn.global-dsc.cn/dgzz_img/71efaaeefc353c09d5ccde4bd1a15310.png'  // 群聊默认头像
+      }
+      return item.SessionLogo ? getProductImageUrlChat(item.SessionLogo) : this.defaultAvatar
+    },
+
     // ----------- 撤回消息
     async revokeMessage(msg) {
       const msgTime = new Date(msg.MsgTime).getTime()  // 消息发送时间戳
-      if (Date.now() - msgTime > 30 * 60 * 1000) {  // 超过10分钟禁止撤回
+      if (Date.now() - msgTime > 30 * 60 * 1000) {  // 超过30分钟禁止撤回
         uni.showToast({ title: '只能撤回30分钟之内的消息', icon: 'none' })
         return
       }
@@ -915,6 +1099,8 @@ export default {
         msg.IsRevoke = true
         msg.RevokeText = '您撤回了一条消息'
         msg.MsgType = 0
+        // 同步会话列表：如果撤回的是最后一条消息，更新列表预览
+        RecentService.revoke_message(this.interlocutorKey, oldDomain)
       } catch (e) {
         console.error('撤回消息失败:', e)
         uni.showToast({ title: '撤回失败', icon: 'none' })
@@ -988,6 +1174,12 @@ export default {
       return pad(msgDate.getMonth() + 1) + '-' + pad(msgDate.getDate()) + ' ' + hms
     },
 
+    // ----------- 新发送的消息根据与上一条的时间差决定是否显示时间分割线
+    setShowTimeForNew(msg) {
+      const lastMessage = this.messageList[this.messageList.length - 1]  // 当前最后一条消息
+      msg.ShowTime = !lastMessage || this.timeDiffMinutes(msg.MsgTime, lastMessage.MsgTime) >= 1
+    },
+
     // ----------- 发送消息
     async onSend() {
       const text = this.inputText.trim()
@@ -1022,6 +1214,7 @@ export default {
       }
       // 本地消息也要按 @名字 切片段，否则气泡渲染为空
       msg.TextSegments = this.parseAtSegments(msg.DisplayText)
+      this.setShowTimeForNew(msg)  // 与上一条消息间隔超过1分钟时显示时间分割线
       this.messageList.push(msg)
       RecentService.new_message(this.interlocutorKey, msg)  // 同步会话列表的最后一条消息
       this.inputText = ''
@@ -1222,6 +1415,7 @@ export default {
         ImageWidth: 0,  // 图片原始宽度
         ImageHeight: 0  // 图片原始高度
       }  // 先插入列表展示的本地图片消息
+      this.setShowTimeForNew(msg)  // 与上一条消息间隔超过1分钟时显示时间分割线
       this.messageList.push(msg)
       this.scrollToBottom()
       try {
@@ -1575,6 +1769,7 @@ export default {
         IsRead: 0  // 已读状态，对方已读回执到达后更新
       }  // 先插入聊天列表的本地语音消息
       // 先展示本地语音气泡，让用户不用等待上传完成
+      this.setShowTimeForNew(msg)  // 与上一条消息间隔超过1分钟时显示时间分割线
       this.messageList.push(msg)
       this.scrollToBottom()
       try {
@@ -1796,6 +1991,7 @@ export default {
         State: -1,
         IsRead: 0
       }  // 先插入列表展示的本地文件消息
+      this.setShowTimeForNew(msg)  // 与上一条消息间隔超过1分钟时显示时间分割线
       this.messageList.push(msg)
       this.scrollToBottom()
       try {
@@ -1887,26 +2083,20 @@ export default {
         const fileInfo = fileInfoRes.data || fileInfoRes.Data || fileInfoRes  // 兼容不同响应层级
         const fileServerPath = fileInfo.FileServerPath || fileInfo.fileServerPath || ''  // OBS 文件路径
         if (!fileServerPath) throw new Error('文件不存在或已删除')
-        // 第二步：获取 OBS 公开访问域名
-        // 优先用发送时保存的 FileDomain，没有则从缓存取，再没有则请求一次 OBS 签名拿 displayDomain
-        let obsDomain = msg.FileDomain || uni.getStorageSync('obsDisplayDomain') || ''  // OBS 公开域名
-        if (!obsDomain) {
-          // 请求一次 OBS 签名只拿 displayDomain（和 supply-chain-im 的 JnOssLook 等效）
-          const tmpKey = this.generateGuid().replace(/-/g, '')  // 临时 key
-          const sigRes = await request({
-            url: '/obs/putUrlSignature',
-            method: 'post',
-            params: { category: 50, key: tmpKey, priv: false },
-            apiKey: 'profitapi'
-          })  // OBS 签名响应
-          const sig = sigRes.data || sigRes.Data || sigRes  // 兼容不同响应层级
-          const opts = sig.options || sig.Options  // OBS 上传参数
-          obsDomain = String(opts.displayDomain || '').replace(/\/$/, '')  // 去掉末尾斜杠
-          if (obsDomain) uni.setStorageSync('obsDisplayDomain', obsDomain)  // 缓存供下次用
+        // 第二步：拼 OBS 直链下载（和 supply-chain-im 的 JnOssLook + '/' + FileServerPath 一样）
+        let downloadUrl = 'https://prodimg.global-dsc.cn/' + fileServerPath  // OBS 公开访问直链
+        // CAD 模型文件先调预览接口转换，3D 用查看器在线看，2D 转换成 PDF 后走下载打开
+        const modelViewType = this.getModelViewType(msg.FileName)  // 模型类型：3d / 2d / 空
+        if (modelViewType) {
+          const viewUrl = await this.fetchCadViewUrl(downloadUrl, msg.FileName, modelViewType)  // 转换后的文件地址
+          if (!viewUrl) return  // 不支持预览的已提示过
+          if (modelViewType === '3d') {
+            // 3D 模型需要 cad-aps 查看器渲染，webview 打开
+            uni.navigateTo({ url: '/pages-sub/web-view/index?url=' + encodeURIComponent('https://cad-aps.global-dsc.cn/?filePath=' + viewUrl) })
+            return
+          }
+          downloadUrl = viewUrl  // 2D 转换产物是 PDF，直接走下面的下载打开流程
         }
-        if (!obsDomain) throw new Error('获取文件下载地址失败')
-        // 第三步：拼 OBS 直链下载（和 supply-chain-im 的 look_host + '/' + FileServerPath 一样）
-        const downloadUrl = obsDomain + '/' + fileServerPath  // OBS 直链地址
         // 下载文件到临时目录再用 openDocument 预览
         const downloadRes = await new Promise((resolve, reject) => {
           uni.downloadFile({
@@ -1918,8 +2108,11 @@ export default {
         if (downloadRes.statusCode !== 200) {
           throw new Error('下载失败，状态码：' + downloadRes.statusCode)
         }
+        // 2D 转换产物是 PDF，文件类型固定传 pdf；其他文件按原后缀，避免临时文件没有后缀微信识别不了
+        const openFileType = modelViewType === '2d' ? 'pdf' : this.getFileExt(msg.FileName)  // openDocument 的文件类型
         uni.openDocument({
           filePath: downloadRes.tempFilePath,
+          fileType: openFileType || undefined,
           showMenu: true,
           fail: () => uni.showToast({ title: '无法打开此文件', icon: 'none' })
         })
@@ -1929,6 +2122,36 @@ export default {
       } finally {
         uni.hideLoading()
       }
+    },
+
+    // ----------- 判断文件是否为 CAD 模型，返回 3d / 2d / 空字符串
+    getModelViewType(fileName) {
+      if (!fileName) return ''
+      const name = String(fileName).toLowerCase()  // 统一小写再匹配后缀
+      // Creo 版本后缀 prt.1 ~ prt.10，用 endsWith 单独处理
+      if (/\.prt\.([1-9]|10)$/.test(name)) return '3d'
+      const ext = this.getFileExt(fileName)  // 文件后缀
+      const model3dExts = ['sldprt', 'step', 'stp', 'prt', 'catpart', 'par', 'z3prt']  // 3D 模型后缀
+      const model2dExts = ['dwg', 'dxf', 'exb', 'drw', 'slddrw', 'catdrawing', 'dft', 'idw']  // 2D 图纸后缀
+      if (model3dExts.includes(ext)) return '3d'
+      if (model2dExts.includes(ext)) return '2d'
+      return ''
+    },
+
+    // ----------- 调 CAD 预览接口，返回转换后的文件地址（3D 是模型文件，2D 是 PDF）
+    async fetchCadViewUrl(downloadUrl, fileName, viewType) {
+      // Creo 版本后缀的 fileExt 传 prt.N，和 supply-chain-im 一致；其余传不带点的后缀
+      const name = String(fileName).toLowerCase()  // 统一小写
+      const prtVersionMatch = name.match(/\.prt\.([1-9]|10)$/)  // prt.1~10 匹配结果
+      const fileExt = prtVersionMatch ? 'prt.' + prtVersionMatch[1] : this.getFileExt(fileName)  // 传给接口的后缀
+      const viewApi = viewType === '3d' ? getFile3DView : getFile2DView  // 3D/2D 预览接口
+      const viewRes = await viewApi({ downUrl: downloadUrl, fileExt })  // 预览接口响应
+      const viewUrl = typeof viewRes === 'string' ? viewRes : (viewRes.data || viewRes.Data || '')  // 转换后的文件地址
+      if (!viewUrl) {
+        uni.showToast({ title: '该模型暂不支持预览', icon: 'none' })
+        return ''
+      }
+      return viewUrl
     },
 
     // ----------- 获取文件后缀（小写，不含点）
@@ -2058,7 +2281,7 @@ export default {
       justify-content: center;
       padding: 0 0 22rpx;
       text {
-        font-size: 24rpx;
+        font-size: 26rpx;
         color: #999;
         background: rgba(0, 0, 0, 0.05);
         padding: 8rpx 24rpx;
@@ -2071,7 +2294,7 @@ export default {
       display: flex;
       align-items: flex-start;
       margin-top: 0;
-      margin-bottom: 32rpx;
+      margin-bottom: 36rpx;
 
       &.msg-row-left {
         flex-direction: row;
@@ -2098,7 +2321,7 @@ export default {
         /* 已读/未读标记文字 */
         .msg-read-status {
           font-size: 24rpx;
-          color: #b2b2b2;
+          color: #a8a8a8;
           margin-right: 12rpx;
           margin-bottom: 8rpx;
           flex-shrink: 0;
@@ -2206,7 +2429,7 @@ export default {
         &.msg-bubble-link {
           background: transparent !important;
           padding: 0;
-          max-width: 520rpx;
+          max-width: 480rpx;
 
           &::after { display: none; }
         }
@@ -2905,7 +3128,7 @@ export default {
   .msg-action-icon {
     font-size: 34rpx;
     color: #fff;
-    margin-bottom: 8rpx;
+    margin-bottom: 18rpx;
     line-height: 1;
   }
 
@@ -2925,5 +3148,160 @@ export default {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+/* 转发联系人弹窗 */
+.forward-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  display: flex;
+  align-items: flex-end;
+}
+
+.forward-sheet {
+  width: 100%;
+  max-height: 70vh;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  display: flex;
+  flex-direction: column;
+  animation: forwardSlideUp 0.2s ease-out;
+}
+
+@keyframes forwardSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.forward-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx;
+  border-bottom: 1rpx solid #f0f0f0;
+}
+
+.forward-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #181818;
+}
+
+.forward-close {
+  font-size: 36rpx;
+  color: #999;
+  padding: 4rpx 12rpx;
+}
+
+.forward-list {
+  flex: 1;
+  max-height: 60vh;
+}
+
+.forward-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 32rpx;
+  border-bottom: 1rpx solid #f5f5f5;
+
+  &:active {
+    background: #f5f5f5;
+  }
+}
+
+.forward-avatar {
+  width: 80rpx;
+  height: 80rpx;
+  border-radius: 12rpx;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+}
+
+.forward-name {
+  font-size: 30rpx;
+  color: #181818;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.forward-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80rpx 0;
+  color: #999;
+  font-size: 28rpx;
+}
+
+/* 转发确认弹窗 */
+.forward-confirm-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.forward-confirm-dialog {
+  width: 560rpx;
+  background: #fff;
+  border-radius: 20rpx;
+  overflow: hidden;
+  animation: actionPopIn 0.16s ease-out;
+}
+
+.forward-confirm-title {
+  display: block;
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #181818;
+  padding: 40rpx 32rpx 16rpx;
+}
+
+.forward-confirm-desc {
+  display: block;
+  text-align: center;
+  font-size: 28rpx;
+  color: #666;
+  padding: 0 32rpx 36rpx;
+  line-height: 1.5;
+}
+
+.forward-confirm-btns {
+  display: flex;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.forward-confirm-btn {
+  flex: 1;
+  text-align: center;
+  font-size: 32rpx;
+  padding: 24rpx 0;
+
+  &:active {
+    background: #f5f5f5;
+  }
+}
+
+.forward-confirm-cancel {
+  color: #999;
+  border-right: 1rpx solid #f0f0f0;
+}
+
+.forward-confirm-ok {
+  color: #07c160;
+  font-weight: 600;
 }
 </style>

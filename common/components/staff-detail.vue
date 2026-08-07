@@ -290,7 +290,8 @@ export default {
     },
     // 判断电话号码是否包含*号（脱敏号码不可拨打）
     phoneHasMask() {
-      return this.phoneNumber && this.phoneNumber.includes('*')
+      // return this.phoneNumber && this.phoneNumber.includes('*')
+      return false
     },
     // 脱敏后的电话号码（后四位改成****）
     maskedPhoneNumber() {

@@ -39,6 +39,92 @@ export function getSummary(categoryId, dataId) {
   });
 }
 
+// 获取指定用户完整信息（对应 supply-chain-im 的 /user/getuserinfo）
+export function getUserInfo(userId) {
+  return request({
+    url: '/user/getuserinfo',
+    method: 'get',
+    params: { userId },
+    apiKey: 'profitapi',
+    headers: { tokenType: 'jrzz' }
+  });
+}
+
+// 获取企业详细信息（companyId 来自用户信息的 CompID）
+export function getCompanyInfo(companyId) {
+  return request({
+    url: '/search/getCompanyInfo',
+    method: 'get',
+    params: { companyId },
+    apiKey: 'profitapi',
+    headers: { tokenType: 'jrzz' }
+  });
+}
+
+// 搜索用户（对应 supply-chain-im 的 /user/searchUser）
+export function searchUsers(params) {
+  return request({
+    url: '/user/searchUser',
+    method: 'get',
+    params,  // { q, page, pageSize }
+    apiKey: 'profitapi',
+    headers: { tokenType: 'jrzz' },
+    skipCodeCheck: true  // 跳过 401/403 拦截，防止误清 token
+  });
+}
+
+// 搜索群组（对应 supply-chain-im 的 /im/group/GroupListSearch）
+export function searchGroups(params) {
+  return request({
+    url: '/im/group/GroupListSearch',
+    method: 'get',
+    params,  // { q, page, pageSize }
+    apiKey: 'api60'
+  });
+}
+
+// 申请加入团队（对应 supply-chain-im 的 /im/group/GroupApply）
+export function joinGroup(params) {
+  return request({
+    url: '/im/group/GroupApply',
+    method: 'post',
+    params,  // { groupId, applyRemark }
+    apiKey: 'api60',
+    skipCodeCheck: true
+  });
+}
+
+// 获取好友目录列表（对应 supply-chain-im 的 /dir/2055/list，Category.IMFriendsDir = 2055）
+export function getFriendDirList(dirId = 0) {
+  return request({
+    url: '/dir/2055/list',
+    method: 'get',
+    params: { dirId },
+    apiKey: 'api60'
+  });
+}
+
+// 创建好友目录（对应 supply-chain-im 的 /dir/2055/add）
+export function addFriendDir(data) {
+  return request({
+    url: '/dir/2055/add',
+    method: 'post',
+    data,  // { ParentID, DirName }
+    apiKey: 'api60'
+  });
+}
+
+// 添加好友到通讯录（对应 supply-chain-im 的 ApiService.Yun + /addressBook/AddressBookAdd）
+export function addFriend(data) {
+  return request({
+    url: '/yun/addressBook/AddressBookAdd',
+    method: 'post',
+    data,  // { UserID, UserRemark, DirID }
+    apiKey: 'api60',
+    skipCodeCheck: true  // 跳过 401 拦截，防止误清 token
+  });
+}
+
 // 获取聊天记录列表
 export function getRecordList(params) {
   return request({
@@ -175,6 +261,27 @@ export function getDocFileInfo(dataId) {
   });
 }
 
+// 接口4.2：3D 模型预览，GET /file3Dview?downUrl=xxx&fileExt=xxx
+// 对应 IM 项目：DataService.get(`${ApiService.Common}/file3Dview?downUrl=${fileurl}&fileExt=${fileExt}`)
+export function getFile3DView(params) {
+  return request({
+    url: '/file3Dview',
+    method: 'get',
+    params, // { downUrl, fileExt }
+    apiKey: 'api60'
+  });
+}
+
+// 接口4.3：2D 模型预览，GET /file2Dview?downUrl=xxx&fileExt=xxx
+export function getFile2DView(params) {
+  return request({
+    url: '/file2Dview',
+    method: 'get',
+    params, // { downUrl, fileExt }
+    apiKey: 'api60'
+  });
+}
+
 // 接口5：黑名单检查，GET /im/getIsUserBlock?blockUserId={blockUserId}
 // 对应 IM 项目：DataService.get(`${ApiService.EngineerApi}/im/getIsUserBlock?blockUserId=${blockUserId}`)
 export function getIsUserBlock(params) {
@@ -182,6 +289,17 @@ export function getIsUserBlock(params) {
     url: '/im/getIsUserBlock',
     method: 'get',
     params, // { blockUserId }
+    apiKey: 'profitapi'
+  });
+}
+
+// 接口5.1：拉黑/取消拉黑用户，POST /im/block { blockUserId, status }
+// status: 1=拉黑 0=取消拉黑
+export function blockUser(params) {
+  return request({
+    url: '/im/block',
+    method: 'post',
+    params, // { blockUserId, status }
     apiKey: 'profitapi'
   });
 }

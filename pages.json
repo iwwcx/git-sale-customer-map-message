@@ -124,6 +124,18 @@
 					"style": {
 						"navigationBarTitleText": "群信息"
 					}
+				},
+				{
+					"path": "user/info",
+					"style": {
+						"navigationBarTitleText": "个人信息"
+					}
+				},
+				{
+					"path": "search/index",
+					"style": {
+						"navigationBarTitleText": "查找"
+					}
 				}
 			]
 		},

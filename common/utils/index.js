@@ -31,7 +31,7 @@ export const getProductImageUrlChat = (val) => {
   }
 }
 
-// 格式化消息时间：今天显示时分，昨天显示"昨天"，本周显示星期几，其他显示月日
+// 格式化消息时间：今天显示时分，昨天显示"昨天"，本周内显示星期几，更早的显示月日
 export const formatTime = (timeStr) => {
   if (!timeStr) return ''
   const msgDate = new Date(timeStr)
@@ -52,11 +52,13 @@ export const formatTime = (timeStr) => {
   if (diffDay === 1) {
     return '昨天'
   }
-  if (diffDay > 1 && diffDay < 7) {
+  // 本周一距今的天数（周一为一周起点，周日 getDay 为 0 需特殊处理）
+  const daysSinceMonday = (now.getDay() + 6) % 7
+  if (diffDay > 1 && diffDay <= daysSinceMonday) {
     const weekArr = ['日', '一', '二', '三', '四', '五', '六']
     return '星期' + weekArr[msgDate.getDay()]
   }
-  // 超过7天 → MM-DD
+  // 上周及更早 → MM-DD
   return pad(msgDate.getMonth() + 1) + '-' + pad(msgDate.getDate())
 }
 
